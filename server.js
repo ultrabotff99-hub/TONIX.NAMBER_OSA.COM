@@ -55,7 +55,7 @@ app.use(session({
 
 // Rate limiters
 const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
+  windowMs: 5 * 60 * 1000,
   max: 5,
   message: { error: 'Too many attempts. Wait 15 minutes.' }
 });
