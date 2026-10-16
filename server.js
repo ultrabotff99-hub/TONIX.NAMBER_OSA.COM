@@ -49,8 +49,8 @@ app.use(session({
   cookie: {
     maxAge: 2 * 60 * 60 * 1000,  // 2 hours
     httpOnly: true,
-    secure:  'false',
-    sameSite: 'strict'
+    secure: true,
+    sameSite: 'lax'
   }
 }));
 
@@ -471,7 +471,7 @@ app.get('/api/admin/audit', requireAdmin, (req, res) => {
 });
 
 app.get('/api/admin/searches', requireAdmin, (req, res) => {
-  const db = loadDB();
+  const db.loadDB();
   res.json(db.searches.slice(-200).reverse());
 });
 
@@ -495,3 +495,4 @@ app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'adm
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`🔒 Private Cyber Tool running on port ${PORT}`));
+                    
