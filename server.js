@@ -471,7 +471,7 @@ app.get('/api/admin/audit', requireAdmin, (req, res) => {
 });
 
 app.get('/api/admin/searches', requireAdmin, (req, res) => {
-  const db.loadDB();
+  const db = loadDB();
   res.json(db.searches.slice(-200).reverse());
 });
 
