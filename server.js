@@ -8,6 +8,7 @@ const path = require('path');
 const fs = require('fs');
 
 const app = express();
+app.set('trust proxy', 1);
 const DB_FILE = './data/database.json';
 
 // ============ DATABASE (JSON) ============
