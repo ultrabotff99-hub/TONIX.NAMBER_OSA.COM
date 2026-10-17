@@ -9,8 +9,6 @@ const fs = require('fs');
 
 const app = express();
 const DB_FILE = './data/database.json';
-app.set('trust proxy', 1);
-
 // ============ DATABASE (JSON) ============
 if (!fs.existsSync('./data')) fs.mkdirSync('./data');
 function loadDB() {
@@ -42,6 +40,19 @@ const UPI_CONFIG = { upiId: 'farispachukk@oksbi', payeeName: 'Cyber Security Too
 app.set('trust proxy', 1);
 app.use(express.json({ limit: '1mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
+app.set('trust proxy', 1); // ഇത് ഉണ്ടെന്ന് ഉറപ്പാക്കുക
+
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'my-super-secret-key-12345',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production', // Render-ൽ ഇത് true ആകും
+    httpOnly: true,
+    sameSite: 'lax', // ഇത് വളരെ പ്രധാനമാണ്
+    maxAge: 24 * 60 * 60 * 1000 // 24 മണിക്കൂർ
+  }
+}));
 
 app.use(session({
   secret: process.env.SESSION_SECRET || 'fallback-secret',
