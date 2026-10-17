@@ -82,10 +82,8 @@ async function call(url, opts={}) {
   });
   const d = await r.json().catch(() => ({}));
   
-  // സെഷൻ എക്സ്പയർ ആയാൽ തിരികെ പാസ്‌വേഡ് ചോദിക്കാൻ (URL-ലേക്ക് തന്നെ തിരിച്ചയക്കുന്നു)
   if (r.status === 401) {
-    document.getElementById('dash').classList.add('hidden');
-    document.body.innerHTML = '<div class="alert a-err" style="max-width:400px;margin:50px auto;">Session Expired. Please re-open the admin URL with your password.</div>';
+    document.body.innerHTML = '<div class="alert a-err" style="max-width:400px;margin:50px auto;padding:20px;">Session Expired. Please re-open the admin URL with your password.</div>';
     throw new Error('Auth required');
   }
   if (!r.ok) throw new Error(d.error || 'Failed');
@@ -94,14 +92,14 @@ async function call(url, opts={}) {
 
 async function adminLogout() {
   await fetch('/api/admin/logout', { method:'POST', credentials:'same-origin' });
-  window.location.href = '/'; // ലോഗ് ഔട്ട് ചെയ്താൽ ഹോം പേജിലേക്ക് പോകും
+  window.location.href = '/'; 
 }
 
 async function startDash() {
   try {
     const check = await call('/api/admin/check');
     if (!check.isAdmin) {
-      document.body.innerHTML = '<div class="alert a-err" style="max-width:400px;margin:50px auto;">Access Denied. Invalid Password.</div>';
+      document.body.innerHTML = '<div class="alert a-err" style="max-width:400px;margin:50px auto;padding:20px;">Access Denied. Please check your URL password.</div>';
       return;
     }
     
@@ -150,11 +148,8 @@ async function loadTab(tab) {
   }
 }
 
+// 1. PENDING USERS
 async function renderPending(box) {
-  const list = await call('/api/admin/pending');
-  if (!list.length) { box.innerHTML = '<p style="text-align:center;color:#888;padding:30px">No pending registrations ✅</p>'; return; }
-
-  async function renderPending(box) {
   const list = await call('/api/admin/pending');
   if (!list.length) { box.innerHTML = '<p style="text-align:center;color:#888;padding:30px">No pending registrations ✅</p>'; return; }
 
@@ -170,6 +165,7 @@ async function renderPending(box) {
     </div>
   `).join('');
 }
+
 async function approveUser(id) {
   if (!confirm('Approve this user?')) return;
   await call('/api/admin/approve-user', { method:'POST', body:{ userId: id }});
@@ -181,16 +177,16 @@ async function rejectUser(id) {
   loadTab('pending'); loadStats();
 }
 
+// 2. USERS
 async function renderUsers(box) {
   const list = await call('/api/admin/users');
   if (!list.length) { box.innerHTML = '<p style="text-align:center;color:#888;padding:30px">No users yet</p>'; return; }
 
   box.innerHTML = list.map(u => `
     <div class="card" style="border-left:3px solid ${u.blocked ? '#ff6b6b' : '#00ffa3'}">
-      <div class="row"><span class="lbl">Name</span><span class="val">${esc(u.name)}</span></div>
-      <div class="row"><span class="lbl">Email</span><span class="val">${esc(u.email)}</span></div>
-      <div class="row"><span class="lbl">Phone</span><span class="val">${esc(u.phone || '-')}</span></div>
+      <div class="row"><span class="lbl">Username</span><span class="val" style="color:#00d4ff">${esc(u.username)}</span></div>
       <div class="row"><span class="lbl">Credits</span><span class="val" style="color:#00ffa3;font-weight:700">₹${u.credits}</span></div>
+      <div class="row"><span class="lbl">Total Spent</span><span class="val">₹${u.totalSpent || 0}</span></div>
       <div class="row"><span class="lbl">Status</span><span class="val">${u.blocked ? '🚫 Blocked' : '✅ Active'}</span></div>
       <div class="btn-row" style="flex-wrap:wrap">
         <button class="btn btn-ghost btn-sm" onclick="addCredits(${u.id})">💵 Add Credits</button>
@@ -219,15 +215,16 @@ async function delUser(id) {
   loadTab('users'); loadStats();
 }
 
+// 3. PAYMENTS
 async function renderPayments(box) {
   const list = await call('/api/admin/payments');
   if (!list.length) { box.innerHTML = '<p style="text-align:center;color:#888;padding:30px">No payments yet</p>'; return; }
 
   box.innerHTML = list.map(p => `
     <div class="card" style="border-left:3px solid ${p.status==='approved' ? '#00ffa3' : p.status==='rejected' ? '#ff6b6b' : '#ffaa00'}">
-      <div class="row"><span class="lbl">User</span><span class="val">${esc(p.userName)} (${esc(p.userEmail)})</span></div>
+      <div class="row"><span class="lbl">Username</span><span class="val" style="color:#00d4ff">${esc(p.username)}</span></div>
       <div class="row"><span class="lbl">Amount</span><span class="val" style="color:#00ffa3;font-weight:700">₹${p.amount}</span></div>
-      <div class="row"><span class="lbl">Txn ID</span><span class="val" style="color:#00d4ff">${esc(p.txnId)}</span></div>
+      <div class="row"><span class="lbl">Txn ID</span><span class="val">${esc(p.txnId)}</span></div>
       <div class="row"><span class="lbl">Status</span><span class="val">
         <span class="badge ${p.status==='approved'?'b-ok':p.status==='rejected'?'b-rej':'b-pend'}">${p.status.toUpperCase()}</span>
       </span></div>
@@ -253,6 +250,7 @@ async function rejectPay(id) {
   loadTab('payments'); loadStats();
 }
 
+// 4. APIS
 async function renderApis(box) {
   const list = await call('/api/admin/apis');
   box.innerHTML = `
@@ -303,24 +301,27 @@ async function delApi(id) {
   loadTab('apis');
 }
 
+// 5. AUDIT LOGS
 async function renderAudit(box) {
   const list = await call('/api/admin/audit');
   if (!list.length) { box.innerHTML = '<p style="text-align:center;color:#888;padding:30px">No logs</p>'; return; }
   box.innerHTML = list.map(l => `
     <div class="card" style="padding:10px">
       <div class="row"><span class="lbl">Action</span><span class="val" style="color:#00d4ff;font-weight:700">${esc(l.action)}</span></div>
+      <div class="row"><span class="lbl">User</span><span class="val">${esc(l.user)}</span></div>
       <div class="row"><span class="lbl">IP</span><span class="val">${esc(l.ip)}</span></div>
       <div class="row"><span class="lbl">Time</span><span class="val">${new Date(l.timestamp).toLocaleString()}</span></div>
     </div>
   `).join('');
 }
 
+// 6. SEARCHES
 async function renderSearches(box) {
   const list = await call('/api/admin/searches');
   if (!list.length) { box.innerHTML = '<p style="text-align:center;color:#888;padding:30px">No searches</p>'; return; }
   box.innerHTML = list.map(s => `
     <div class="card" style="padding:10px">
-      <div class="row"><span class="lbl">User</span><span class="val">${esc(s.userEmail)}</span></div>
+      <div class="row"><span class="lbl">User</span><span class="val">${esc(s.username || 'Unknown')}</span></div>
       <div class="row"><span class="lbl">Phone</span><span class="val" style="color:#00ffa3">${esc(s.phone)}</span></div>
       <div class="row"><span class="lbl">Cost</span><span class="val">₹${s.cost}</span></div>
       <div class="row"><span class="lbl">Time</span><span class="val">${new Date(s.timestamp).toLocaleString()}</span></div>
@@ -328,7 +329,7 @@ async function renderSearches(box) {
   `).join('');
 }
 
-// പേജ് ലോഡ് ആകുമ്പോൾ നേരിട്ട് ഡാഷ്ബോർഡ് ഓപ്പൺ ചെയ്യുന്നു
+// ഓട്ടോമാറ്റിക് ആയി ലോഡ് ചെയ്യുമ്പോൾ ഡാഷ്ബോർഡ് ഓപ്പൺ ചെയ്യുക
 startDash();
 </script>
 </body>
