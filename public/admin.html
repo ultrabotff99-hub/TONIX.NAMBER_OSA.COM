@@ -47,11 +47,10 @@
 </head>
 <body>
 
-<!-- LOGIN -->
+<!-- LOGIN (UPDATED: Only Password) -->
 <div id="loginBox" class="login-box">
   <h2 style="font-size:16px;margin-bottom:16px;text-align:center;color:#00d4ff">🔒 Admin Login</h2>
-  <input type="email" id="aEmail" placeholder="Admin Email">
-  <input type="password" id="aPass" placeholder="Password">
+  <input type="password" id="aPass" placeholder="Enter Admin Password">
   <button class="btn" style="width:100%" onclick="adminLogin()">Login</button>
   <div id="loginMsg" style="margin-top:12px"></div>
 </div>
@@ -61,7 +60,6 @@
   <div class="header">
     <h1>🛡️ Admin Panel</h1>
     <div>
-      <span style="font-size:11px;color:#888;margin-right:10px" id="adminEmail"></span>
       <button class="btn btn-ghost" onclick="adminLogout()">Logout</button>
     </div>
   </div>
@@ -102,15 +100,21 @@ async function call(url, opts={}) {
   return d;
 }
 
+// UPDATED: Password only login
 async function adminLogin() {
   try {
+    const pass = document.getElementById('aPass').value;
+    
+    if (!pass) {
+      document.getElementById('loginMsg').innerHTML = `<div class="alert a-err">Please enter password</div>`;
+      return;
+    }
+
     await call('/api/admin/login', {
-      method:'POST',
-      body: {
-        email: document.getElementById('aEmail').value.trim(),
-        password: document.getElementById('aPass').value
-      }
+      method: 'POST',
+      body: { password: pass } 
     });
+    
     startDash();
   } catch (e) {
     document.getElementById('loginMsg').innerHTML = `<div class="alert a-err">${esc(e.message)}</div>`;
@@ -125,7 +129,6 @@ async function adminLogout() {
 async function startDash() {
   document.getElementById('loginBox').classList.add('hidden');
   document.getElementById('dash').classList.remove('hidden');
-  document.getElementById('adminEmail').textContent = document.getElementById('aEmail').value;
   await loadStats();
   await loadTab('pending');
 }
@@ -143,236 +146,4 @@ async function loadStats() {
       <div class="stat"><div class="v">${s.totalUsers}</div><div class="l">Active Users</div></div>
       <div class="stat"><div class="v" style="color:#ffaa00">${s.pendingUsers}</div><div class="l">Pending</div></div>
       <div class="stat"><div class="v" style="color:#ff6b6b">${s.blockedUsers}</div><div class="l">Blocked</div></div>
-      <div class="stat"><div class="v">${s.totalSearches}</div><div class="l">Searches</div></div>
-      <div class="stat"><div class="v" style="color:#00ffa3">₹${s.totalRevenue}</div><div class="l">Revenue</div></div>
-      <div class="stat"><div class="v" style="color:#ffaa00">${s.pendingPayments}</div><div class="l">Pending Pay</div></div>
-    `;
-  } catch (e) { console.error(e); }
-}
-
-async function loadTab(tab) {
-  currentTab = tab;
-  const box = document.getElementById('tabContent');
-  box.innerHTML = '<p style="text-align:center;color:#888;padding:30px">Loading...</p>';
-
-  try {
-    if (tab === 'pending') await renderPending(box);
-    else if (tab === 'users') await renderUsers(box);
-    else if (tab === 'payments') await renderPayments(box);
-    else if (tab === 'apis') await renderApis(box);
-    else if (tab === 'audit') await renderAudit(box);
-    else if (tab === 'searches') await renderSearches(box);
-  } catch (e) {
-    box.innerHTML = `<div class="alert a-err">${esc(e.message)}</div>`;
-  }
-}
-
-async function renderPending(box) {
-  const list = await call('/api/admin/pending');
-  if (!list.length) { box.innerHTML = '<p style="text-align:center;color:#888;padding:30px">No pending registrations ✅</p>'; return; }
-
-  box.innerHTML = list.map(p => `
-    <div class="card" style="border-left:3px solid #ffaa00">
-      <div class="row"><span class="lbl">Name</span><span class="val">${esc(p.name)}</span></div>
-      <div class="row"><span class="lbl">Email</span><span class="val">${esc(p.email)}</span></div>
-      <div class="row"><span class="lbl">Phone</span><span class="val">${esc(p.phone || '-')}</span></div>
-      <div class="row"><span class="lbl">Purpose</span><span class="val">${esc(p.purpose)}</span></div>
-      <div class="row"><span class="lbl">Invite Code</span><span class="val">${esc(p.inviteCode)}</span></div>
-      <div class="row"><span class="lbl">Requested</span><span class="val">${new Date(p.createdAt).toLocaleString()}</span></div>
-      <div class="btn-row">
-        <button class="btn btn-ok" style="flex:1" onclick="approveUser(${p.id})">✅ Approve</button>
-        <button class="btn btn-danger" style="flex:1" onclick="rejectUser(${p.id})">❌ Reject</button>
-      </div>
-    </div>
-  `).join('');
-}
-
-async function approveUser(id) {
-  if (!confirm('Approve this user?')) return;
-  await call('/api/admin/approve-user', { method:'POST', body:{ userId: id }});
-  loadTab('pending'); loadStats();
-}
-async function rejectUser(id) {
-  if (!confirm('Reject this registration?')) return;
-  await call('/api/admin/reject-user', { method:'POST', body:{ userId: id }});
-  loadTab('pending'); loadStats();
-}
-
-async function renderUsers(box) {
-  const list = await call('/api/admin/users');
-  if (!list.length) { box.innerHTML = '<p style="text-align:center;color:#888;padding:30px">No users yet</p>'; return; }
-
-  box.innerHTML = list.map(u => `
-    <div class="card" style="border-left:3px solid ${u.blocked ? '#ff6b6b' : '#00ffa3'}">
-      <div class="row"><span class="lbl">Name</span><span class="val">${esc(u.name)}</span></div>
-      <div class="row"><span class="lbl">Email</span><span class="val">${esc(u.email)}</span></div>
-      <div class="row"><span class="lbl">Phone</span><span class="val">${esc(u.phone || '-')}</span></div>
-      <div class="row"><span class="lbl">Credits</span><span class="val" style="color:#00ffa3;font-weight:700">₹${u.credits}</span></div>
-      <div class="row"><span class="lbl">Total Spent</span><span class="val">₹${u.totalSpent || 0}</span></div>
-      <div class="row"><span class="lbl">Status</span><span class="val">${u.blocked ? '🚫 Blocked' : '✅ Active'}</span></div>
-      <div class="btn-row" style="flex-wrap:wrap">
-        <button class="btn btn-ghost btn-sm" onclick="addCredits(${u.id})">💵 Add Credits</button>
-        <button class="btn ${u.blocked ? 'btn-ok' : 'btn-danger'} btn-sm" onclick="toggleBlock(${u.id}, ${!u.blocked})">
-          ${u.blocked ? '✅ Unblock' : '🚫 Block'}
-        </button>
-        <button class="btn btn-danger btn-sm" onclick="delUser(${u.id}, '${esc(u.email)}')">🗑️ Delete</button>
-      </div>
-    </div>
-  `).join('');
-}
-
-async function addCredits(id) {
-  const amt = prompt('Amount to add (₹, can be negative):');
-  if (!amt || isNaN(amt)) return;
-  await call('/api/admin/user/credits', { method:'POST', body:{ userId: id, delta: Number(amt) }});
-  loadTab('users'); loadStats();
-}
-async function toggleBlock(id, blocked) {
-  await call('/api/admin/user/block', { method:'POST', body:{ userId: id, blocked }});
-  loadTab('users'); loadStats();
-}
-async function delUser(id, email) {
-  if (!confirm(`Delete user ${email}? This cannot be undone.`)) return;
-  await call('/api/admin/user/' + id, { method:'DELETE' });
-  loadTab('users'); loadStats();
-}
-
-async function renderPayments(box) {
-  const list = await call('/api/admin/payments');
-  if (!list.length) { box.innerHTML = '<p style="text-align:center;color:#888;padding:30px">No payments yet</p>'; return; }
-
-  box.innerHTML = list.map(p => `
-    <div class="card" style="border-left:3px solid ${
-      p.status==='approved' ? '#00ffa3' : p.status==='rejected' ? '#ff6b6b' : '#ffaa00'}">
-      <div class="row"><span class="lbl">User</span><span class="val">${esc(p.userName)} (${esc(p.userEmail)})</span></div>
-      <div class="row"><span class="lbl">Amount</span><span class="val" style="color:#00ffa3;font-weight:700">₹${p.amount}</span></div>
-      <div class="row"><span class="lbl">Txn ID</span><span class="val" style="color:#00d4ff">${esc(p.txnId)}</span></div>
-      <div class="row"><span class="lbl">Status</span><span class="val">
-        <span class="badge ${p.status==='approved'?'b-ok':p.status==='rejected'?'b-rej':'b-pend'}">
-          ${p.status.toUpperCase()}
-        </span></span></div>
-      <div class="row"><span class="lbl">Time</span><span class="val">${new Date(p.timestamp).toLocaleString()}</span></div>
-      ${p.status === 'pending' ? `
-        <div class="btn-row">
-          <button class="btn btn-ok" style="flex:1" onclick="approvePay(${p.id})">✅ Approve ₹${p.amount}</button>
-          <button class="btn btn-danger" style="flex:1" onclick="rejectPay(${p.id})">❌ Reject</button>
-        </div>
-      ` : ''}
-    </div>
-  `).join('');
-}
-
-async function approvePay(id) {
-  if (!confirm('Approve and add credits?')) return;
-  await call('/api/admin/payment/approve', { method:'POST', body:{ paymentId: id }});
-  loadTab('payments'); loadStats();
-}
-async function rejectPay(id) {
-  const reason = prompt('Reject reason:', 'Invalid Txn ID');
-  if (reason === null) return;
-  await call('/api/admin/payment/reject', { method:'POST', body:{ paymentId: id, reason }});
-  loadTab('payments'); loadStats();
-}
-
-async function renderApis(box) {
-  const list = await call('/api/admin/apis');
-  box.innerHTML = `
-    <div class="card" style="border-left:3px solid #7b2ff7">
-      <h3 style="font-size:14px;margin-bottom:10px;color:#00d4ff">➕ Add New API</h3>
-      <input id="newApiName" placeholder="API Name (e.g. API-4)">
-      <input id="newApiUrl" placeholder="API URL (ending with q=)">
-      <input id="newApiPrice" type="number" placeholder="Price per search (₹)" value="10">
-      <input id="newApiLimit" type="number" placeholder="Daily limit" value="1000">
-      <button class="btn" style="width:100%" onclick="addApi()">Add API</button>
-    </div>
-    ${list.map(a => `
-      <div class="card" style="border-left:3px solid ${a.active ? '#00ffa3' : '#666'}">
-        <div class="row"><span class="lbl">Name</span><span class="val">${esc(a.name)}</span></div>
-        <div class="row"><span class="lbl">URL</span><span class="val" style="font-size:11px">${esc(a.url)}</span></div>
-        <div class="row"><span class="lbl">Price</span><span class="val">₹${a.price}</span></div>
-        <div class="row"><span class="lbl">Used Today</span><span class="val">${a.usedToday} / ${a.dailyLimit}</span></div>
-        <div class="row"><span class="lbl">Status</span><span class="val">${a.active ? '✅ Active' : '⛔ Disabled'}</span></div>
-        <div class="btn-row">
-          <button class="btn btn-ghost btn-sm" onclick="editApi(${a.id})">✏️ Edit</button>
-          <button class="btn ${a.active?'btn-danger':'btn-ok'} btn-sm" onclick="toggleApi(${a.id}, ${!a.active})">
-            ${a.active ? '⛔ Disable' : '✅ Enable'}
-          </button>
-          <button class="btn btn-danger btn-sm" onclick="delApi(${a.id})">🗑️ Delete</button>
-        </div>
-      </div>
-    `).join('')}
-  `;
-}
-
-async function addApi() {
-  const name = document.getElementById('newApiName').value.trim();
-  const url = document.getElementById('newApiUrl').value.trim();
-  const price = Number(document.getElementById('newApiPrice').value);
-  const dailyLimit = Number(document.getElementById('newApiLimit').value);
-  if (!name || !url) return alert('Name and URL required');
-  await call('/api/admin/apis', { method:'POST', body:{ name, url, price, dailyLimit, active: true }});
-  loadTab('apis');
-}
-
-async function editApi(id) {
-  const list = await call('/api/admin/apis');
-  const a = list.find(x => x.id === id);
-  const name = prompt('New name:', a.name); if (name === null) return;
-  const url = prompt('New URL:', a.url); if (url === null) return;
-  const price = prompt('New price:', a.price); if (price === null) return;
-  const dailyLimit = prompt('New daily limit:', a.dailyLimit); if (dailyLimit === null) return;
-  await call('/api/admin/apis/' + id, { method:'PUT', body:{ name, url, price: Number(price), dailyLimit: Number(dailyLimit), active: a.active }});
-  loadTab('apis');
-}
-
-async function toggleApi(id, active) {
-  const list = await call('/api/admin/apis');
-  const a = list.find(x => x.id === id);
-  await call('/api/admin/apis/' + id, { method:'PUT', body:{ ...a, active }});
-  loadTab('apis');
-}
-
-async function delApi(id) {
-  if (!confirm('Delete this API?')) return;
-  await call('/api/admin/apis/' + id, { method:'DELETE' });
-  loadTab('apis');
-}
-
-async function renderAudit(box) {
-  const list = await call('/api/admin/audit');
-  if (!list.length) { box.innerHTML = '<p style="text-align:center;color:#888;padding:30px">No logs</p>'; return; }
-  box.innerHTML = list.map(l => `
-    <div class="card" style="padding:10px">
-      <div class="row"><span class="lbl">Action</span><span class="val" style="color:#00d4ff;font-weight:700">${esc(l.action)}</span></div>
-      <div class="row"><span class="lbl">User</span><span class="val">${esc(l.user)}</span></div>
-      <div class="row"><span class="lbl">IP</span><span class="val">${esc(l.ip)}</span></div>
-      <div class="row"><span class="lbl">Details</span><span class="val" style="font-size:11px">${esc(JSON.stringify(l.details))}</span></div>
-      <div class="row"><span class="lbl">Time</span><span class="val">${new Date(l.timestamp).toLocaleString()}</span></div>
-    </div>
-  `).join('');
-}
-
-async function renderSearches(box) {
-  const list = await call('/api/admin/searches');
-  if (!list.length) { box.innerHTML = '<p style="text-align:center;color:#888;padding:30px">No searches</p>'; return; }
-  box.innerHTML = list.map(s => `
-    <div class="card" style="padding:10px">
-      <div class="row"><span class="lbl">User</span><span class="val">${esc(s.userEmail)}</span></div>
-      <div class="row"><span class="lbl">Phone</span><span class="val" style="color:#00ffa3">${esc(s.phone)}</span></div>
-      <div class="row"><span class="lbl">API</span><span class="val">${esc(s.apiName)}</span></div>
-      <div class="row"><span class="lbl">Cost</span><span class="val">₹${s.cost}</span></div>
-      <div class="row"><span class="lbl">Time</span><span class="val">${new Date(s.timestamp).toLocaleString()}</span></div>
-    </div>
-  `).join('');
-}
-
-// Auto check login
-(async () => {
-  try {
-    const r = await call('/api/admin/check');
-    if (r.isAdmin) startDash();
-  } catch {}
-})();
-</script>
-</body>
-  </html>
+      <div class="stat"><div class="
