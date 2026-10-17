@@ -16,7 +16,7 @@ const app = express();
 const DB_FILE = './data/database.json';
 
 // ============ MONGODB CONNECTION ============
-const MONGODB_URI = 'mongodb://ultrabotff99_db_user:%403007@ac-qxe6g2v-shard-00-00.51ktdyn.mongodb.net:27017,ac-qxe6g2v-shard-00-01.51ktdyn.mongodb.net:27017,ac-qxe6g2v-shard-00-02.51ktdyn.mongodb.net:27017/?replicaSet=atlas-qxe6g2v-shard-0&ssl=true&authSource=admin';
+const MONGODB_URI = 'mongodb://ultrabotff99_db_user:ewKFMvFJPqcBgELa@ac-qxe6g2v-shard-00-00.51ktdyn.mongodb.net:27017,ac-qxe6g2v-shard-00-01.51ktdyn.mongodb.net:27017,ac-qxe6g2v-shard-00-02.51ktdyn.mongodb.net:27017/?replicaSet=atlas-qxe6g2v-shard-0&ssl=true&authSource=admin';
 mongoose.connect(MONGODB_URI)
   .then(() => console.log('✅ MongoDB connected successfully'))
   .catch(err => console.error('❌ MongoDB connection error:', err));
