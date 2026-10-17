@@ -9,6 +9,7 @@ const fs = require('fs');
 
 const app = express();
 const DB_FILE = './data/database.json';
+app.set('trust proxy', 1);
 
 // ============ DATABASE (JSON) ============
 if (!fs.existsSync('./data')) fs.mkdirSync('./data');
