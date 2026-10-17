@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🔒 Private Access — Cyber OSI Tool</title>
+<title>🔒 Private Access — Cyber Tool</title>
 <style>
   *{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',sans-serif}
   body{min-height:100vh;background:linear-gradient(135deg,#0a0e27,#1a1a3e,#0f0c29);color:#fff;
     display:flex;align-items:center;justify-content:center;padding:20px}
-  .box{max-width:440px;width:100%;background:rgba(255,255,255,0.04);backdrop-filter:blur(15px);
+  .box{max-width:400px;width:100%;background:rgba(255,255,255,0.04);backdrop-filter:blur(15px);
     border:1px solid rgba(255,255,255,0.1);border-radius:18px;padding:32px;box-shadow:0 25px 50px rgba(0,0,0,0.6)}
   h1{font-size:20px;text-align:center;margin-bottom:6px;
     background:linear-gradient(90deg,#00d4ff,#7b2ff7);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
@@ -28,7 +28,6 @@
   .err{background:rgba(255,0,0,0.15);border:1px solid rgba(255,0,0,0.4);color:#ff6b6b}
   .ok{background:rgba(0,255,163,0.15);border:1px solid rgba(0,255,163,0.4);color:#00ffa3}
   .hidden{display:none}
-  .footer{text-align:center;font-size:10px;color:#666;margin-top:20px;line-height:1.6}
 </style>
 </head>
 <body>
@@ -38,36 +37,28 @@
 
   <div class="tabs">
     <div class="tab active" data-t="login">Login</div>
-    <div class="tab" data-t="register">Register (Invite)</div>
+    <div class="tab" data-t="register">Register</div>
   </div>
 
-  <!-- LOGIN -->
+  <!-- LOGIN FORM (യൂസർനെയിം, പാസ്‌വേഡ് മാത്രം) -->
   <div id="loginForm">
-    <input type="email" id="loginEmail" placeholder="Email">
-    <input type="password" id="loginPassword" placeholder="Password">
+    <input type="text" id="loginUser" placeholder="Username">
+    <input type="password" id="loginPass" placeholder="Password">
     <button class="btn" onclick="doLogin()">Login</button>
   </div>
 
-  <!-- REGISTER -->
+  <!-- REGISTER FORM (യൂസർനെയിം, ഇൻവൈറ്റ് കോഡ്, പാസ്‌വേഡ്) -->
   <div id="registerForm" class="hidden">
-    <input type="text" id="regName" placeholder="Full Name">
-    <input type="email" id="regEmail" placeholder="Email">
-    <input type="tel" id="regPhone" placeholder="Phone (optional)">
-    <input type="text" id="regInvite" placeholder="Invite Code (from admin)" style="text-transform:uppercase">
-    <input type="text" id="regPurpose" placeholder="Purpose (e.g. Security Research)">
-    <input type="password" id="regPassword" placeholder="Password (min 8 characters)">
-    <button class="btn" onclick="doRegister()">Submit Registration</button>
+    <input type="text" id="regUser" placeholder="Choose Username">
+    <input type="text" id="regInvite" placeholder="Invite Code" style="text-transform:uppercase">
+    <input type="password" id="regPass" placeholder="Password (min 8 chars)">
+    <button class="btn" onclick="doRegister()">Submit Request</button>
     <p style="font-size:11px;color:#888;margin-top:10px;text-align:center">
-      Admin manually verify ചെയ്തതിന് ശേഷം മാത്രം login ചെയ്യാൻ പറ്റും
+      അഡ്മിൻ അപ്രൂവ് ചെയ്തതിന് ശേഷം മാത്രം ലോഗിൻ ചെയ്യാൻ സാധിക്കും.
     </p>
   </div>
 
   <div id="msg"></div>
-
-  <div class="footer">
-    Authorized use only · All actions logged · © 2026<br>
-    Unauthorized access is a criminal offense under IT Act 2000
-  </div>
 </div>
 
 <script>
@@ -81,8 +72,7 @@ document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
 });
 
 function showMsg(text, ok = false) {
-  document.getElementById('msg').innerHTML =
-    `<div class="alert ${ok ? 'ok' : 'err'}">${text}</div>`;
+  document.getElementById('msg').innerHTML = `<div class="alert ${ok ? 'ok' : 'err'}">${text}</div>`;
 }
 
 async function call(url, body) {
@@ -100,8 +90,8 @@ async function call(url, body) {
 async function doLogin() {
   try {
     await call('/api/login', {
-      email: document.getElementById('loginEmail').value.trim(),
-      password: document.getElementById('loginPassword').value
+      username: document.getElementById('loginUser').value.trim(),
+      password: document.getElementById('loginPass').value
     });
     window.location.href = '/';
   } catch (e) { showMsg('❌ ' + e.message); }
@@ -110,16 +100,15 @@ async function doLogin() {
 async function doRegister() {
   try {
     const res = await call('/api/register', {
-      name: document.getElementById('regName').value.trim(),
-      email: document.getElementById('regEmail').value.trim(),
-      phone: document.getElementById('regPhone').value.trim(),
+      username: document.getElementById('regUser').value.trim(),
       inviteCode: document.getElementById('regInvite').value.trim(),
-      purpose: document.getElementById('regPurpose').value.trim(),
-      password: document.getElementById('regPassword').value
+      password: document.getElementById('regPass').value
     });
     showMsg('✅ ' + res.message, true);
+    document.getElementById('regUser').value = '';
+    document.getElementById('regPass').value = '';
   } catch (e) { showMsg('❌ ' + e.message); }
 }
 </script>
 </body>
-    </html>
+</html>
