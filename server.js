@@ -8,7 +8,6 @@ const path = require('path');
 const fs = require('fs');
 
 const app = express();
-app.set('trust proxy', 1);
 const DB_FILE = './data/database.json';
 
 // ============ DATABASE (JSON) ============
@@ -39,6 +38,7 @@ function today() { return new Date().toISOString().slice(0,10); }
 const UPI_CONFIG = { upiId: 'farispachukk@oksbi', payeeName: 'Cyber Security Tools' };
 
 // ============ MIDDLEWARE ============
+app.set('trust proxy', 1);
 app.use(express.json({ limit: '1mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
