@@ -15,12 +15,12 @@ const MongoStore = require('connect-mongo');
 const app = express();
 const DB_FILE = './data/database.json';
 
-// ============ MONGODB CONNECTION ============
-const MONGODB_URI = 'mongodb://ultrabotff99_db_user:ewKFMvFJPqcBgELa@ac-qxe6g2v-shard-00-00.51ktdyn.mongodb.net:27017,ac-qxe6g2v-shard-00-01.51ktdyn.mongodb.net:27017,ac-qxe6g2v-shard-00-02.51ktdyn.mongodb.net:27017/?replicaSet=atlas-qxe6g2v-shard-0&ssl=true&authSource=admin';
-mongoose.connect(MONGODB_URI)
+// ============ 🔥 പുതിയ MONGODB CONNECTION ============
+const MONGO_URI = 'mongodb://ultrabotff99:ewKFMvFJPqcBgELa@ac-qxe6g2v-shard-00-00.5lktdyn.mongodb.net:27017,ac-qxe6g2v-shard-00-01.5lktdyn.mongodb.net:27017,ac-qxe6g2v-shard-00-02.5lktdyn.mongodb.net:27017/premium_tool?ssl=true&replicaSet=atlas-e7aco2-shard-0&authSource=admin&retryWrites=true&w=majority';
+
+mongoose.connect(MONGO_URI)
   .then(() => console.log('✅ MongoDB connected successfully'))
   .catch(err => console.error('❌ MongoDB connection error:', err));
-
 
 // ============ DATABASE (JSON) ============
 if (!fs.existsSync('./data')) fs.mkdirSync('./data');
@@ -56,16 +56,18 @@ app.use(express.static(path.join(__dirname, 'public')));
 // Render Proxy Fix
 app.set('trust proxy', 1);
 
-// Session with MongoDB
+// ============ SESSION STORE (FIXED) ============
+const sessionStore = MongoStore.create({
+  mongoUrl: MONGO_URI,
+  collectionName: 'sessions',
+  ttl: 24 * 60 * 60 // 24 hours
+});
+
 app.use(session({
   secret: process.env.SESSION_SECRET || 'cyber_tool_secret_key_2026',
   resave: false,
   saveUninitialized: false,
-  store: MongoStore.create({
-    mongoUrl: MONGODB_URI,
-    collectionName: 'sessions',
-    ttl: 24 * 60 * 60 
-  }),
+  store: sessionStore,
   cookie: {
     secure: process.env.NODE_ENV === 'production', 
     httpOnly: true,
@@ -114,7 +116,7 @@ app.post('/api/register', registerLimiter, async (req, res) => {
   if (!name || !email || !password || !inviteCode) return res.status(400).json({ error: 'All fields required' });
   if (password.length < 8) return res.status(400).json({ error: 'Password min 8 characters' });
 
-  const validCodes = (process.env.INVITE_CODES || '').split(',').map(c => c.trim());
+  const validCodes = (process.env.INVITE_CODES || 'ALPHA2026,BETA2026').split(',').map(c => c.trim());
   if (!validCodes.includes(inviteCode.toUpperCase())) return res.status(403).json({ error: 'Invalid invite code.' });
 
   const db = loadDB();
@@ -222,7 +224,6 @@ app.get('/api/public/apis', requireUser, (req, res) => {
 });
 
 // ============ 🚨 ADMIN DIRECT URL LOGIN ============
-// URL ഉദാഹരണം: /admin?pass=3007
 app.get('/admin', (req, res) => {
   const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '3007'; // നിങ്ങളുടെ പാസ്‌വേഡ്
 
@@ -232,7 +233,6 @@ app.get('/admin', (req, res) => {
     audit(db, 'ADMIN_LOGIN_URL', { ip: req.ip }, req);
     saveDB(db);
     
-    // സെഷൻ സേവ് ചെയ്ത ശേഷം പാനൽ ലോഡ് ചെയ്യുന്നു
     req.session.save((err) => {
       if (err) return res.status(500).send("Session error");
       res.sendFile(path.join(__dirname, 'public', 'admin.html'));
