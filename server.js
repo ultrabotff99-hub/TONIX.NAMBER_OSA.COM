@@ -1,15 +1,30 @@
 require('dotenv').config();
 const express = require('express');
 const session = require('express-session');
+const rateLimit = require('express-rate-limit');
 const bcrypt = require('bcryptjs');
 const axios = require('axios');
-const rateLimit = require('express-rate-limit');
+const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
-const mongoose= require('mongodb://ultrabotff99:WKX9YsibbLVGghit@ac-qxe6g2v-shard-00-00.5lktdyn.mongodb.net:27017,ac-qxe6g2v-shard-00-01.5lktdyn.mongodb.net:27017,ac-qxe6g2v-shard-00-02.5lktdyn.mongodb.net:27017/?ssl=true&replicaSet=atlas-e7aco2-shard-0&authSource=admin')
+
+// 👇 MongoDB ആഡ് ചെയ്തു
+const mongoose = require('mongoose');
+const MongoStore = require('connect-mongo');
+
 const app = express();
 const DB_FILE = './data/database.json';
+
+// ============ MONGODB CONNECTION ============
+const MONGO_URI = 'mongodb://ultrabotff99:WKX9YsibbLVGghit@ac-qxe6g2v-shard-00-00.5lktdyn.mongodb.net:27017,ac-qxe6g2v-shard-00-01.5lktdyn.mongodb.net:27017,ac-qxe6g2v-shard-00-02.5lktdyn.mongodb.net:27017/premium_tool?ssl=true&replicaSet=atlas-e7aco2-shard-0&authSource=admin&retryWrites=true&w=majority';
+
+mongoose.connect(MONGO_URI)
+  .then(() => console.log('✅ MongoDB connected successfully'))
+  .catch(err => console.error('❌ MongoDB connection error:', err));
+
+
 // ============ DATABASE (JSON) ============
+// (നിങ്ങളുടെ ഉള്ളിലെ ഡാറ്റകൾ സേവ് ചെയ്യാൻ ഇത് നിലനിർത്തുന്നു)
 if (!fs.existsSync('./data')) fs.mkdirSync('./data');
 function loadDB() {
   if (!fs.existsSync(DB_FILE)) {
@@ -23,7 +38,6 @@ function loadDB() {
       ],
       payments: [],
       searches: [],
-      loginAttempts: {},
       auditLogs: []
     };
     fs.writeFileSync(DB_FILE, JSON.stringify(initial, null, 2));
@@ -37,38 +51,34 @@ function today() { return new Date().toISOString().slice(0,10); }
 const UPI_CONFIG = { upiId: 'farispachukk@oksbi', payeeName: 'Cyber Security Tools' };
 
 // ============ MIDDLEWARE ============
-app.set('trust proxy', 1);
+app.use(cors());
 app.use(express.json({ limit: '1mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
-app.set('trust proxy', 1); // ഇത് ഉണ്ടെന്ന് ഉറപ്പാക്കുക
 
+// 👇 റെൻഡറിന് വേണ്ടിയുള്ള പ്രോക്സി ഫിക്സ്
+app.set('trust proxy', 1);
+
+// 👇 MongoDB ഉപയോഗിച്ചുള്ള സെഷൻ
 app.use(session({
-  secret: process.env.SESSION_SECRET || 'my-super-secret-key-12345',
+  secret: process.env.SESSION_SECRET || 'cyber_tool_secret_key_2026',
   resave: false,
   saveUninitialized: false,
+  store: MongoStore.create({
+    mongoUrl: MONGO_URI,
+    collectionName: 'sessions',
+    ttl: 24 * 60 * 60 // 24 മണിക്കൂർ
+  }),
   cookie: {
-    secure: process.env.NODE_ENV === 'production', // Render-ൽ ഇത് true ആകും
+    secure: process.env.NODE_ENV === 'production', // Render-ൽ HTTPS-ന് വേണ്ടി
     httpOnly: true,
-    sameSite: 'lax', // ഇത് വളരെ പ്രധാനമാണ്
+    sameSite: 'lax',
     maxAge: 24 * 60 * 60 * 1000 // 24 മണിക്കൂർ
-  }
-}));
-
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'fallback-secret',
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    maxAge: 2 * 60 * 60 * 1000,  // 2 hours
-    httpOnly: true,
-    secure: true,
-    sameSite: 'none'
   }
 }));
 
 // Rate limiters
 const loginLimiter = rateLimit({
-  windowMs: 5 * 60 * 1000,
+  windowMs: 15 * 60 * 1000,
   max: 5,
   message: { error: 'Too many attempts. Wait 15 minutes.' }
 });
@@ -122,7 +132,6 @@ app.post('/api/register', registerLimiter, async (req, res) => {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
     return res.status(400).json({ error: 'Invalid email' });
 
-  // Validate invite code
   const validCodes = (process.env.INVITE_CODES || '').split(',').map(c => c.trim());
   if (!validCodes.includes(inviteCode.toUpperCase()))
     return res.status(403).json({ error: 'Invalid invite code. Contact admin.' });
@@ -154,7 +163,6 @@ app.post('/api/login', loginLimiter, async (req, res) => {
   const { email, password } = req.body;
   const db = loadDB();
 
-  // Check pending
   const pendingUser = db.pendingUsers.find(u => u.email === email);
   if (pendingUser) return res.status(403).json({ error: '⏳ Awaiting admin approval' });
 
@@ -197,7 +205,7 @@ app.get('/api/me', requireUser, (req, res) => {
   });
 });
 
-// ============ SEARCH (deduct credit + call API) ============
+// ============ SEARCH ============
 app.post('/api/search', requireUser, apiLimiter, async (req, res) => {
   const { phone, apiId } = req.body;
   if (!/^\d{10}$/.test(phone)) return res.status(400).json({ error: 'Invalid 10-digit number' });
@@ -281,7 +289,6 @@ app.get('/api/my-payments', requireUser, (req, res) => {
   res.json(db.payments.filter(p => p.userId === req.user.id).reverse());
 });
 
-// ============ PUBLIC: APIs list ============
 app.get('/api/public/apis', requireUser, (req, res) => {
   const db = loadDB();
   res.json(db.apis.map(a => ({ id: a.id, name: a.name, price: a.price, active: a.active })));
@@ -304,7 +311,12 @@ app.post('/api/admin/login', loginLimiter, async (req, res) => {
   const db = loadDB();
   audit(db, 'ADMIN_LOGIN', { email }, req);
   saveDB(db);
-  res.json({ success: true });
+  
+  // session സേവ് ആകുന്നുണ്ടെന്ന് ഉറപ്പാക്കാൻ
+  req.session.save((err) => {
+    if (err) return res.status(500).json({ error: 'Session save failed' });
+    res.json({ success: true });
+  });
 });
 
 app.post('/api/admin/logout', (req, res) => {
@@ -507,4 +519,3 @@ app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'adm
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`🔒 Private Cyber Tool running on port ${PORT}`));
-                    
