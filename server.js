@@ -6,7 +6,7 @@ const axios = require('axios');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
 const fs = require('fs');
-
+const mongoose= require('mongodb://ultrabotff99:WKX9YsibbLVGghit@ac-qxe6g2v-shard-00-00.5lktdyn.mongodb.net:27017,ac-qxe6g2v-shard-00-01.5lktdyn.mongodb.net:27017,ac-qxe6g2v-shard-00-02.5lktdyn.mongodb.net:27017/?ssl=true&replicaSet=atlas-e7aco2-shard-0&authSource=admin')
 const app = express();
 const DB_FILE = './data/database.json';
 // ============ DATABASE (JSON) ============
