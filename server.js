@@ -42,10 +42,8 @@ app.use(cors());
 app.use(express.json({ limit: '1mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// 👇 Render-ൽ Session വർക്ക് ആകാൻ ഇത് നിർബന്ധമാണ്
 app.set('trust proxy', 1);
 
-// 👇 MongoDB ഒഴിവാക്കി സാധാരണ Session ഉപയോഗിക്കുന്നു
 app.use(session({
   secret: process.env.SESSION_SECRET || 'cyber_tool_secret_key_2026',
   resave: false,
@@ -60,7 +58,7 @@ app.use(session({
 
 // Rate limiters
 const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, message: { error: 'Too many attempts.' } });
-const registerLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 3, message: { error: 'Too many registrations.' } });
+const registerLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 5, message: { error: 'Too many registrations.' } });
 const apiLimiter = rateLimit({ windowMs: 60 * 1000, max: 20, message: { error: 'Slow down.' } });
 
 // Audit logger
@@ -70,7 +68,7 @@ function audit(db, action, details, req) {
     action, details,
     ip: req.ip || req.connection.remoteAddress,
     ua: req.headers['user-agent'] || '',
-    user: req.session?.email || req.session?.userId || 'guest',
+    user: req.session?.username || req.session?.userId || 'guest',
     timestamp: new Date().toISOString()
   });
   if (db.auditLogs.length > 5000) db.auditLogs = db.auditLogs.slice(-3000);
@@ -83,7 +81,6 @@ function requireUser(req, res, next) {
   const u = db.users.find(x => x.id === req.session.userId);
   if (!u) return res.status(401).json({ error: 'Session invalid' });
   if (u.blocked) return res.status(403).json({ error: 'Account blocked' });
-  if (!u.approved) return res.status(403).json({ error: 'Account pending admin approval' });
   req.user = u;
   next();
 }
@@ -93,46 +90,53 @@ function requireAdmin(req, res, next) {
 }
 
 // ============ USER ROUTES ============
+// രജിസ്ട്രേഷൻ (യൂസർനെയിം, പാസ്‌വേഡ്, ഇൻവൈറ്റ് കോഡ്)
 app.post('/api/register', registerLimiter, async (req, res) => {
-  const { name, email, phone, password, inviteCode, purpose } = req.body;
-  if (!name || !email || !password || !inviteCode) return res.status(400).json({ error: 'All fields required' });
+  const { username, password, inviteCode } = req.body;
+  if (!username || !password || !inviteCode) return res.status(400).json({ error: 'All fields required' });
   if (password.length < 8) return res.status(400).json({ error: 'Password min 8 characters' });
 
   const validCodes = (process.env.INVITE_CODES || 'ALPHA2026,BETA2026').split(',').map(c => c.trim());
   if (!validCodes.includes(inviteCode.toUpperCase())) return res.status(403).json({ error: 'Invalid invite code.' });
 
   const db = loadDB();
-  if (db.users.find(u => u.email === email) || db.pendingUsers.find(u => u.email === email))
-    return res.status(400).json({ error: 'Email already registered' });
+  if (db.users.find(u => u.username === username) || db.pendingUsers.find(u => u.username === username))
+    return res.status(400).json({ error: 'Username already exists' });
 
   const pending = {
-    id: Date.now(), name, email, phone: phone || '', purpose: purpose || 'Research',
-    password: await bcrypt.hash(password, 10), inviteCode: inviteCode.toUpperCase(),
-    createdAt: new Date().toISOString(), approved: false, blocked: false
+    id: Date.now(), 
+    username, 
+    password: await bcrypt.hash(password, 10), 
+    inviteCode: inviteCode.toUpperCase(),
+    createdAt: new Date().toISOString(), 
+    approved: false, 
+    blocked: false
   };
   db.pendingUsers.push(pending);
-  audit(db, 'REGISTER_REQUEST', { email, inviteCode }, req);
+  audit(db, 'REGISTER_REQUEST', { username, inviteCode }, req);
   saveDB(db);
   res.json({ success: true, message: 'Registration submitted. Wait for admin approval.' });
 });
 
+// ലോഗിൻ (യൂസർനെയിം, പാസ്‌വേഡ്)
 app.post('/api/login', loginLimiter, async (req, res) => {
-  const { email, password } = req.body;
+  const { username, password } = req.body;
   const db = loadDB();
-  const pendingUser = db.pendingUsers.find(u => u.email === email);
+  
+  const pendingUser = db.pendingUsers.find(u => u.username === username);
   if (pendingUser) return res.status(403).json({ error: '⏳ Awaiting admin approval' });
 
-  const user = db.users.find(u => u.email === email);
+  const user = db.users.find(u => u.username === username);
   if (!user) return res.status(400).json({ error: 'Invalid credentials' });
   if (user.blocked) return res.status(403).json({ error: 'Account blocked by admin' });
   if (!(await bcrypt.compare(password, user.password))) return res.status(400).json({ error: 'Invalid credentials' });
 
   req.session.userId = user.id;
-  req.session.email = user.email;
+  req.session.username = user.username;
   user.lastLogin = new Date().toISOString();
-  audit(db, 'LOGIN', { email }, req);
+  audit(db, 'LOGIN', { username }, req);
   saveDB(db);
-  res.json({ success: true, user: { name: user.name, email: user.email, credits: user.credits } });
+  res.json({ success: true, user: { name: user.username, credits: user.credits } });
 });
 
 app.post('/api/logout', (req, res) => {
@@ -141,7 +145,7 @@ app.post('/api/logout', (req, res) => {
 });
 
 app.get('/api/me', requireUser, (req, res) => {
-  res.json({ name: req.user.name, email: req.user.email, credits: req.user.credits, totalSpent: req.user.totalSpent || 0 });
+  res.json({ name: req.user.username, credits: req.user.credits, totalSpent: req.user.totalSpent || 0 });
 });
 
 app.post('/api/search', requireUser, apiLimiter, async (req, res) => {
@@ -165,7 +169,7 @@ app.post('/api/search', requireUser, apiLimiter, async (req, res) => {
     user.totalSpent = (user.totalSpent || 0) + cost;
     api.usedToday++;
 
-    db.searches.push({ id: Date.now(), userId: user.id, userEmail: user.email, phone, apiId: api.id, apiName: api.name, cost, timestamp: new Date().toISOString() });
+    db.searches.push({ id: Date.now(), userId: user.id, username: user.username, phone, apiId: api.id, apiName: api.name, cost, timestamp: new Date().toISOString() });
     audit(db, 'SEARCH', { phone, apiId, cost }, req);
     saveDB(db);
 
@@ -194,7 +198,7 @@ app.post('/api/recharge', requireUser, (req, res) => {
   const db = loadDB();
   if (db.payments.find(p => p.txnId === txnId)) return res.status(400).json({ error: 'Txn ID already submitted' });
 
-  db.payments.push({ id: Date.now(), userId: req.user.id, userEmail: req.user.email, userName: req.user.name, amount: amt, method: 'upi', txnId, status: 'pending', timestamp: new Date().toISOString() });
+  db.payments.push({ id: Date.now(), userId: req.user.id, username: req.user.username, amount: amt, method: 'upi', txnId, status: 'pending', timestamp: new Date().toISOString() });
   audit(db, 'PAYMENT_REQUEST', { amount: amt, txnId }, req);
   saveDB(db);
   res.json({ success: true, message: 'Submitted. Admin will verify soon.' });
@@ -205,28 +209,21 @@ app.get('/api/public/apis', requireUser, (req, res) => {
   res.json(db.apis.map(a => ({ id: a.id, name: a.name, price: a.price, active: a.active })));
 });
 
-// ============ 🚨 ADMIN DIRECT URL LOGIN ============
+// ============ ADMIN DIRECT URL LOGIN ============
 app.get('/admin', (req, res) => {
-  const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '3007'; // നിങ്ങളുടെ പാസ്‌വേഡ്
+  const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '3007';
 
   if (req.query.pass === ADMIN_PASSWORD) {
     req.session.isAdmin = true;
     const db = loadDB();
     audit(db, 'ADMIN_LOGIN_URL', { ip: req.ip }, req);
     saveDB(db);
-    
     req.session.save((err) => {
       if (err) return res.status(500).send("Session error");
       res.sendFile(path.join(__dirname, 'public', 'admin.html'));
     });
   } else {
-    res.status(401).send(`
-      <body style="background:#0a0e27;color:#fff;font-family:sans-serif;text-align:center;padding:50px;">
-        <h2 style="color:#ff6b6b;">⛔ Unauthorized Access</h2>
-        <p>You must provide a valid password in the URL.</p>
-        <p style="color:#888;font-size:12px;margin-top:20px;">Example: /admin?pass=YOUR_PASSWORD</p>
-      </body>
-    `);
+    res.status(401).send(`<body style="background:#0a0e27;color:#fff;text-align:center;padding:50px;font-family:sans-serif;"><h2 style="color:#ff6b6b;">⛔ Unauthorized Access</h2><p>Invalid or missing password in URL.</p></body>`);
   }
 });
 
@@ -234,10 +231,7 @@ app.get('/admin', (req, res) => {
 app.get('/api/admin/check', (req, res) => res.json({ isAdmin: !!req.session.isAdmin }));
 app.post('/api/admin/logout', (req, res) => { req.session.isAdmin = false; res.json({ success: true }); });
 
-app.get('/api/admin/pending', requireAdmin, (req, res) => {
-  const db = loadDB();
-  res.json(db.pendingUsers);
-});
+app.get('/api/admin/pending', requireAdmin, (req, res) => res.json(loadDB().pendingUsers));
 
 app.post('/api/admin/approve-user', requireAdmin, (req, res) => {
   const db = loadDB();
@@ -257,10 +251,7 @@ app.post('/api/admin/reject-user', requireAdmin, (req, res) => {
   res.json({ success: true });
 });
 
-app.get('/api/admin/users', requireAdmin, (req, res) => {
-  const db = loadDB();
-  res.json(db.users);
-});
+app.get('/api/admin/users', requireAdmin, (req, res) => res.json(loadDB().users));
 
 app.post('/api/admin/user/block', requireAdmin, (req, res) => {
   const db = loadDB();
@@ -283,9 +274,7 @@ app.delete('/api/admin/user/:id', requireAdmin, (req, res) => {
   res.json({ success: true });
 });
 
-app.get('/api/admin/payments', requireAdmin, (req, res) => {
-  res.json(loadDB().payments.sort((a,b) => b.id - a.id));
-});
+app.get('/api/admin/payments', requireAdmin, (req, res) => res.json(loadDB().payments.sort((a,b) => b.id - a.id)));
 
 app.post('/api/admin/payment/approve', requireAdmin, (req, res) => {
   const db = loadDB();
@@ -338,7 +327,6 @@ app.get('/api/admin/stats', requireAdmin, (req, res) => {
   });
 });
 
-// ============ Fallback ============
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
 const PORT = process.env.PORT || 3000;
