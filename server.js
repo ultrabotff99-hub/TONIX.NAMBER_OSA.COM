@@ -294,39 +294,6 @@ app.get('/api/public/apis', requireUser, (req, res) => {
   res.json(db.apis.map(a => ({ id: a.id, name: a.name, price: a.price, active: a.active })));
 });
 
-// ============ ADMIN LOGIN ============
-app.post('/api/admin/login', loginLimiter, async (req, res) => {
-  const { email, password } = req.body;
-  const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
-  const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
-
-  if (email !== ADMIN_EMAIL || password !== ADMIN_PASSWORD) {
-    const db = loadDB();
-    audit(db, 'ADMIN_LOGIN_FAIL', { email }, req);
-    saveDB(db);
-    return res.status(401).json({ error: 'Invalid admin credentials' });
-  }
-  req.session.isAdmin = true;
-  req.session.adminEmail = email;
-  const db = loadDB();
-  audit(db, 'ADMIN_LOGIN', { email }, req);
-  saveDB(db);
-  
-  // session സേവ് ആകുന്നുണ്ടെന്ന് ഉറപ്പാക്കാൻ
-  req.session.save((err) => {
-    if (err) return res.status(500).json({ error: 'Session save failed' });
-    res.json({ success: true });
-  });
-});
-
-app.post('/api/admin/logout', (req, res) => {
-  req.session.isAdmin = false;
-  res.json({ success: true });
-});
-
-app.get('/api/admin/check', (req, res) => {
-  res.json({ isAdmin: !!req.session.isAdmin });
-});
 
 // ============ ADMIN: Pending users ============
 app.get('/api/admin/pending', requireAdmin, (req, res) => {
