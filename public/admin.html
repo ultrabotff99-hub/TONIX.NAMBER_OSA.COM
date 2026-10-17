@@ -154,12 +154,13 @@ async function renderPending(box) {
   const list = await call('/api/admin/pending');
   if (!list.length) { box.innerHTML = '<p style="text-align:center;color:#888;padding:30px">No pending registrations ✅</p>'; return; }
 
+  async function renderPending(box) {
+  const list = await call('/api/admin/pending');
+  if (!list.length) { box.innerHTML = '<p style="text-align:center;color:#888;padding:30px">No pending registrations ✅</p>'; return; }
+
   box.innerHTML = list.map(p => `
     <div class="card" style="border-left:3px solid #ffaa00">
-      <div class="row"><span class="lbl">Name</span><span class="val">${esc(p.name)}</span></div>
-      <div class="row"><span class="lbl">Email</span><span class="val">${esc(p.email)}</span></div>
-      <div class="row"><span class="lbl">Phone</span><span class="val">${esc(p.phone || '-')}</span></div>
-      <div class="row"><span class="lbl">Purpose</span><span class="val">${esc(p.purpose)}</span></div>
+      <div class="row"><span class="lbl">Username</span><span class="val" style="color:#00d4ff;font-weight:bold">${esc(p.username)}</span></div>
       <div class="row"><span class="lbl">Invite Code</span><span class="val">${esc(p.inviteCode)}</span></div>
       <div class="row"><span class="lbl">Requested</span><span class="val">${new Date(p.createdAt).toLocaleString()}</span></div>
       <div class="btn-row">
@@ -169,7 +170,6 @@ async function renderPending(box) {
     </div>
   `).join('');
 }
-
 async function approveUser(id) {
   if (!confirm('Approve this user?')) return;
   await call('/api/admin/approve-user', { method:'POST', body:{ userId: id }});
