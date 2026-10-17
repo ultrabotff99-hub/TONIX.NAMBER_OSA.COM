@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -35,7 +34,6 @@
   .lbl{color:#9aa5b1;min-width:110px}
   .val{text-align:right;flex:1;word-break:break-word}
   .hidden{display:none!important}
-  .login-box{max-width:380px;margin:80px auto;background:rgba(255,255,255,0.04);padding:32px;border-radius:18px;border:1px solid rgba(255,255,255,0.1)}
   .alert{padding:10px;border-radius:8px;margin-bottom:12px;font-size:12px;text-align:center}
   .a-err{background:rgba(255,0,0,0.13);border:1px solid rgba(255,0,0,0.35);color:#ff6b6b}
   .a-ok{background:rgba(0,255,163,0.13);border:1px solid rgba(0,255,163,0.35);color:#00ffa3}
@@ -48,15 +46,6 @@
 </head>
 <body>
 
-<!-- LOGIN (UPDATED: Only Password) -->
-<div id="loginBox" class="login-box">
-  <h2 style="font-size:16px;margin-bottom:16px;text-align:center;color:#00d4ff">🔒 Admin Login</h2>
-  <input type="password" id="aPass" placeholder="Enter Admin Password">
-  <button class="btn" style="width:100%" onclick="adminLogin()">Login</button>
-  <div id="loginMsg" style="margin-top:12px"></div>
-</div>
-
-<!-- DASHBOARD -->
 <div id="dash" class="hidden container">
   <div class="header">
     <h1>🛡️ Admin Panel</h1>
@@ -92,46 +81,36 @@ async function call(url, opts={}) {
     body: opts.body ? JSON.stringify(opts.body) : undefined
   });
   const d = await r.json().catch(() => ({}));
-  if (r.status === 401 && !url.includes('/admin/login')) {
+  
+  // സെഷൻ എക്സ്പയർ ആയാൽ തിരികെ പാസ്‌വേഡ് ചോദിക്കാൻ (URL-ലേക്ക് തന്നെ തിരിച്ചയക്കുന്നു)
+  if (r.status === 401) {
     document.getElementById('dash').classList.add('hidden');
-    document.getElementById('loginBox').classList.remove('hidden');
+    document.body.innerHTML = '<div class="alert a-err" style="max-width:400px;margin:50px auto;">Session Expired. Please re-open the admin URL with your password.</div>';
     throw new Error('Auth required');
   }
   if (!r.ok) throw new Error(d.error || 'Failed');
   return d;
 }
 
-// UPDATED: Password only login
-async function adminLogin() {
-  try {
-    const pass = document.getElementById('aPass').value;
-    
-    if (!pass) {
-      document.getElementById('loginMsg').innerHTML = `<div class="alert a-err">Please enter password</div>`;
-      return;
-    }
-
-    await call('/api/admin/login', {
-      method: 'POST',
-      body: { password: pass } 
-    });
-    
-    startDash();
-  } catch (e) {
-    document.getElementById('loginMsg').innerHTML = `<div class="alert a-err">${esc(e.message)}</div>`;
-  }
-}
-
 async function adminLogout() {
   await fetch('/api/admin/logout', { method:'POST', credentials:'same-origin' });
-  location.reload();
+  window.location.href = '/'; // ലോഗ് ഔട്ട് ചെയ്താൽ ഹോം പേജിലേക്ക് പോകും
 }
 
 async function startDash() {
-  document.getElementById('loginBox').classList.add('hidden');
-  document.getElementById('dash').classList.remove('hidden');
-  await loadStats();
-  await loadTab('pending');
+  try {
+    const check = await call('/api/admin/check');
+    if (!check.isAdmin) {
+      document.body.innerHTML = '<div class="alert a-err" style="max-width:400px;margin:50px auto;">Access Denied. Invalid Password.</div>';
+      return;
+    }
+    
+    document.getElementById('dash').classList.remove('hidden');
+    await loadStats();
+    await loadTab('pending');
+  } catch (e) {
+    console.error(e);
+  }
 }
 
 document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
@@ -212,21 +191,20 @@ async function renderUsers(box) {
       <div class="row"><span class="lbl">Email</span><span class="val">${esc(u.email)}</span></div>
       <div class="row"><span class="lbl">Phone</span><span class="val">${esc(u.phone || '-')}</span></div>
       <div class="row"><span class="lbl">Credits</span><span class="val" style="color:#00ffa3;font-weight:700">₹${u.credits}</span></div>
-      <div class="row"><span class="lbl">Total Spent</span><span class="val">₹${u.totalSpent || 0}</span></div>
       <div class="row"><span class="lbl">Status</span><span class="val">${u.blocked ? '🚫 Blocked' : '✅ Active'}</span></div>
       <div class="btn-row" style="flex-wrap:wrap">
         <button class="btn btn-ghost btn-sm" onclick="addCredits(${u.id})">💵 Add Credits</button>
         <button class="btn ${u.blocked ? 'btn-ok' : 'btn-danger'} btn-sm" onclick="toggleBlock(${u.id}, ${!u.blocked})">
           ${u.blocked ? '✅ Unblock' : '🚫 Block'}
         </button>
-        <button class="btn btn-danger btn-sm" onclick="delUser(${u.id}, '${esc(u.email)}')">🗑️ Delete</button>
+        <button class="btn btn-danger btn-sm" onclick="delUser(${u.id})">🗑️ Delete</button>
       </div>
     </div>
   `).join('');
 }
 
 async function addCredits(id) {
-  const amt = prompt('Amount to add (₹, can be negative):');
+  const amt = prompt('Amount to add (₹):');
   if (!amt || isNaN(amt)) return;
   await call('/api/admin/user/credits', { method:'POST', body:{ userId: id, delta: Number(amt) }});
   loadTab('users'); loadStats();
@@ -235,8 +213,8 @@ async function toggleBlock(id, blocked) {
   await call('/api/admin/user/block', { method:'POST', body:{ userId: id, blocked }});
   loadTab('users'); loadStats();
 }
-async function delUser(id, email) {
-  if (!confirm(`Delete user ${email}? This cannot be undone.`)) return;
+async function delUser(id) {
+  if (!confirm(`Delete this user? Cannot be undone.`)) return;
   await call('/api/admin/user/' + id, { method:'DELETE' });
   loadTab('users'); loadStats();
 }
@@ -246,15 +224,13 @@ async function renderPayments(box) {
   if (!list.length) { box.innerHTML = '<p style="text-align:center;color:#888;padding:30px">No payments yet</p>'; return; }
 
   box.innerHTML = list.map(p => `
-    <div class="card" style="border-left:3px solid ${
-      p.status==='approved' ? '#00ffa3' : p.status==='rejected' ? '#ff6b6b' : '#ffaa00'}">
+    <div class="card" style="border-left:3px solid ${p.status==='approved' ? '#00ffa3' : p.status==='rejected' ? '#ff6b6b' : '#ffaa00'}">
       <div class="row"><span class="lbl">User</span><span class="val">${esc(p.userName)} (${esc(p.userEmail)})</span></div>
       <div class="row"><span class="lbl">Amount</span><span class="val" style="color:#00ffa3;font-weight:700">₹${p.amount}</span></div>
       <div class="row"><span class="lbl">Txn ID</span><span class="val" style="color:#00d4ff">${esc(p.txnId)}</span></div>
       <div class="row"><span class="lbl">Status</span><span class="val">
-        <span class="badge ${p.status==='approved'?'b-ok':p.status==='rejected'?'b-rej':'b-pend'}">
-          ${p.status.toUpperCase()}
-        </span></span></div>
+        <span class="badge ${p.status==='approved'?'b-ok':p.status==='rejected'?'b-rej':'b-pend'}">${p.status.toUpperCase()}</span>
+      </span></div>
       <div class="row"><span class="lbl">Time</span><span class="val">${new Date(p.timestamp).toLocaleString()}</span></div>
       ${p.status === 'pending' ? `
         <div class="btn-row">
@@ -272,9 +248,8 @@ async function approvePay(id) {
   loadTab('payments'); loadStats();
 }
 async function rejectPay(id) {
-  const reason = prompt('Reject reason:', 'Invalid Txn ID');
-  if (reason === null) return;
-  await call('/api/admin/payment/reject', { method:'POST', body:{ paymentId: id, reason }});
+  if (!confirm('Reject this payment?')) return;
+  await call('/api/admin/payment/reject', { method:'POST', body:{ paymentId: id }});
   loadTab('payments'); loadStats();
 }
 
@@ -283,21 +258,18 @@ async function renderApis(box) {
   box.innerHTML = `
     <div class="card" style="border-left:3px solid #7b2ff7">
       <h3 style="font-size:14px;margin-bottom:10px;color:#00d4ff">➕ Add New API</h3>
-      <input id="newApiName" placeholder="API Name (e.g. API-4)">
+      <input id="newApiName" placeholder="API Name">
       <input id="newApiUrl" placeholder="API URL (ending with q=)">
-      <input id="newApiPrice" type="number" placeholder="Price per search (₹)" value="10">
+      <input id="newApiPrice" type="number" placeholder="Price (₹)" value="10">
       <input id="newApiLimit" type="number" placeholder="Daily limit" value="1000">
       <button class="btn" style="width:100%" onclick="addApi()">Add API</button>
     </div>
     ${list.map(a => `
       <div class="card" style="border-left:3px solid ${a.active ? '#00ffa3' : '#666'}">
         <div class="row"><span class="lbl">Name</span><span class="val">${esc(a.name)}</span></div>
-        <div class="row"><span class="lbl">URL</span><span class="val" style="font-size:11px">${esc(a.url)}</span></div>
         <div class="row"><span class="lbl">Price</span><span class="val">₹${a.price}</span></div>
         <div class="row"><span class="lbl">Used Today</span><span class="val">${a.usedToday} / ${a.dailyLimit}</span></div>
-        <div class="row"><span class="lbl">Status</span><span class="val">${a.active ? '✅ Active' : '⛔ Disabled'}</span></div>
         <div class="btn-row">
-          <button class="btn btn-ghost btn-sm" onclick="editApi(${a.id})">✏️ Edit</button>
           <button class="btn ${a.active?'btn-danger':'btn-ok'} btn-sm" onclick="toggleApi(${a.id}, ${!a.active})">
             ${a.active ? '⛔ Disable' : '✅ Enable'}
           </button>
@@ -315,17 +287,6 @@ async function addApi() {
   const dailyLimit = Number(document.getElementById('newApiLimit').value);
   if (!name || !url) return alert('Name and URL required');
   await call('/api/admin/apis', { method:'POST', body:{ name, url, price, dailyLimit, active: true }});
-  loadTab('apis');
-}
-
-async function editApi(id) {
-  const list = await call('/api/admin/apis');
-  const a = list.find(x => x.id === id);
-  const name = prompt('New name:', a.name); if (name === null) return;
-  const url = prompt('New URL:', a.url); if (url === null) return;
-  const price = prompt('New price:', a.price); if (price === null) return;
-  const dailyLimit = prompt('New daily limit:', a.dailyLimit); if (dailyLimit === null) return;
-  await call('/api/admin/apis/' + id, { method:'PUT', body:{ name, url, price: Number(price), dailyLimit: Number(dailyLimit), active: a.active }});
   loadTab('apis');
 }
 
@@ -348,9 +309,7 @@ async function renderAudit(box) {
   box.innerHTML = list.map(l => `
     <div class="card" style="padding:10px">
       <div class="row"><span class="lbl">Action</span><span class="val" style="color:#00d4ff;font-weight:700">${esc(l.action)}</span></div>
-      <div class="row"><span class="lbl">User</span><span class="val">${esc(l.user)}</span></div>
       <div class="row"><span class="lbl">IP</span><span class="val">${esc(l.ip)}</span></div>
-      <div class="row"><span class="lbl">Details</span><span class="val" style="font-size:11px">${esc(JSON.stringify(l.details))}</span></div>
       <div class="row"><span class="lbl">Time</span><span class="val">${new Date(l.timestamp).toLocaleString()}</span></div>
     </div>
   `).join('');
@@ -363,20 +322,14 @@ async function renderSearches(box) {
     <div class="card" style="padding:10px">
       <div class="row"><span class="lbl">User</span><span class="val">${esc(s.userEmail)}</span></div>
       <div class="row"><span class="lbl">Phone</span><span class="val" style="color:#00ffa3">${esc(s.phone)}</span></div>
-      <div class="row"><span class="lbl">API</span><span class="val">${esc(s.apiName)}</span></div>
       <div class="row"><span class="lbl">Cost</span><span class="val">₹${s.cost}</span></div>
       <div class="row"><span class="lbl">Time</span><span class="val">${new Date(s.timestamp).toLocaleString()}</span></div>
     </div>
   `).join('');
 }
 
-// Auto check admin session on load
-(async () => {
-  try {
-    const r = await call('/api/admin/check');
-    if (r.isAdmin) startDash();
-  } catch {}
-})();
+// പേജ് ലോഡ് ആകുമ്പോൾ നേരിട്ട് ഡാഷ്ബോർഡ് ഓപ്പൺ ചെയ്യുന്നു
+startDash();
 </script>
 </body>
-  </html>
+ </html>
