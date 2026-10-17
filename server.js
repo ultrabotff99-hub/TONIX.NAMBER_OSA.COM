@@ -8,19 +8,8 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 
-// MongoDB
-const mongoose = require('mongoose');
-const MongoStore = require('connect-mongo');
-
 const app = express();
 const DB_FILE = './data/database.json';
-
-// ============ 🔥 പുതിയ MONGODB CONNECTION ============
-const MONGO_URI = 'mongodb://ultrabotff99:ewKFMvFJPqcBgELa@ac-qxe6g2v-shard-00-00.5lktdyn.mongodb.net:27017,ac-qxe6g2v-shard-00-01.5lktdyn.mongodb.net:27017,ac-qxe6g2v-shard-00-02.5lktdyn.mongodb.net:27017/premium_tool?ssl=true&replicaSet=atlas-e7aco2-shard-0&authSource=admin&retryWrites=true&w=majority';
-
-mongoose.connect(MONGO_URI)
-  .then(() => console.log('✅ MongoDB connected successfully'))
-  .catch(err => console.error('❌ MongoDB connection error:', err));
 
 // ============ DATABASE (JSON) ============
 if (!fs.existsSync('./data')) fs.mkdirSync('./data');
@@ -53,21 +42,14 @@ app.use(cors());
 app.use(express.json({ limit: '1mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Render Proxy Fix
+// 👇 Render-ൽ Session വർക്ക് ആകാൻ ഇത് നിർബന്ധമാണ്
 app.set('trust proxy', 1);
 
-// ============ SESSION STORE (FIXED) ============
-const sessionStore = MongoStore.create({
-  mongoUrl: MONGO_URI,
-  collectionName: 'sessions',
-  ttl: 24 * 60 * 60 // 24 hours
-});
-
+// 👇 MongoDB ഒഴിവാക്കി സാധാരണ Session ഉപയോഗിക്കുന്നു
 app.use(session({
   secret: process.env.SESSION_SECRET || 'cyber_tool_secret_key_2026',
   resave: false,
   saveUninitialized: false,
-  store: sessionStore,
   cookie: {
     secure: process.env.NODE_ENV === 'production', 
     httpOnly: true,
