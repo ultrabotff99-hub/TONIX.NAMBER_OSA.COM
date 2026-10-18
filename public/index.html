@@ -9,7 +9,7 @@
   body{min-height:100vh;background:linear-gradient(135deg,#0a0e27,#1a1a3e);color:#fff;padding:20px}
   .hidden{display:none!important}
   
-  /* Login Overlay Styles */
+  /* Login Overlay */
   .overlay{position:fixed;inset:0;background:#0a0e27;z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;}
   .login-box{background:rgba(255,255,255,0.05);padding:30px;border-radius:15px;border:1px solid rgba(255,255,255,0.1);max-width:380px;width:100%;text-align:center;}
   .login-box h2{color:#00d4ff;margin-bottom:10px;font-size:20px;}
@@ -19,7 +19,7 @@
   .login-box button{width:100%;padding:13px;background:linear-gradient(90deg,#00d4ff,#7b2ff7);border:none;border-radius:10px;color:#fff;font-weight:bold;cursor:pointer;font-size:15px;}
   .login-box .err{color:#ff6b6b;font-size:12px;margin-top:15px;}
 
-  /* Dashboard Styles */
+  /* Dashboard */
   .nav{max-width:900px;margin:0 auto 24px;display:flex;justify-content:space-between;align-items:center;
     background:rgba(255,255,255,0.04);padding:14px 20px;border-radius:14px;border:1px solid rgba(255,255,255,0.1)}
   .nav h1{font-size:16px;color:#00d4ff}
@@ -32,17 +32,11 @@
   .container{max-width:700px;margin:0 auto}
   .card{background:rgba(255,255,255,0.04);backdrop-filter:blur(15px);
     border:1px solid rgba(255,255,255,0.1);border-radius:18px;padding:26px}
-  input,select{width:100%;padding:13px 16px;background:rgba(0,0,0,0.4);
+  input{width:100%;padding:13px 16px;background:rgba(0,0,0,0.4);
     border:1px solid rgba(255,255,255,0.15);border-radius:10px;color:#fff;font-size:15px;outline:none;margin-bottom:14px}
-  input:focus,select:focus{border-color:#00d4ff;box-shadow:0 0 12px rgba(0,212,255,0.25)}
-  .api-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:16px}
-  .api-opt{background:rgba(0,0,0,0.3);border:2px solid rgba(255,255,255,0.1);padding:14px;
-    border-radius:12px;cursor:pointer;text-align:center;transition:.2s}
-  .api-opt.sel{border-color:#00d4ff;background:rgba(0,212,255,0.08)}
-  .api-opt .name{font-size:13px;margin-bottom:6px}
-  .api-opt .price{color:#00ffa3;font-weight:700;font-size:13px}
+  input:focus{border-color:#00d4ff;box-shadow:0 0 12px rgba(0,212,255,0.25)}
   
-  /* Modal Styles */
+  /* Modal */
   .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);backdrop-filter:blur(6px);
     z-index:999;padding:15px;overflow-y:auto}
   .modal.on{display:block}
@@ -53,7 +47,7 @@
   .x{background:rgba(255,0,0,0.2);border:1px solid rgba(255,0,0,0.5);color:#ff6b6b;
     width:34px;height:34px;border-radius:50%;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center}
   
-  /* Data Display Styles */
+  /* Data Display */
   .sec-title{font-size:13px;text-transform:uppercase;letter-spacing:1.5px;color:#00d4ff;
     margin:20px 0 10px;padding-left:10px;border-left:3px solid #00d4ff;font-weight:bold;}
   .row{display:flex;justify-content:space-between;gap:10px;padding:8px 0;
@@ -62,7 +56,7 @@
   .lbl{color:#9aa5b1;min-width:120px;word-break:break-word}
   .val{color:#fff;text-align:right;flex:1;word-break:break-word}
   .val.hi{color:#00ffa3;font-weight:bold}
-  .ic{background:rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:12px;margin-bottom:12px;box-shadow: 0 4px 6px rgba(0,0,0,0.1)}
+  .ic{background:rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:12px;margin-bottom:12px;}
   
   /* Loader & Alerts */
   .loader{text-align:center;padding:30px;display:none}
@@ -77,7 +71,6 @@
 </head>
 <body>
 
-<!-- 1. LOGIN OVERLAY -->
 <div id="loginOverlay" class="overlay hidden">
   <div class="login-box">
     <h2>🔒 Enter Username</h2>
@@ -88,7 +81,6 @@
   </div>
 </div>
 
-<!-- 2. MAIN DASHBOARD -->
 <div id="mainDash" class="hidden">
   <div class="nav">
     <h1>🔒 Cyber Tool <span style="font-size:11px;color:#ff6b6b">PRIVATE</span></h1>
@@ -106,9 +98,7 @@
         ⚠️ Authorized use only · All searches logged
       </p>
       <input type="tel" id="phone" placeholder="Enter 10-digit mobile number" maxlength="10" inputmode="numeric">
-      <p style="font-size:11px;color:#7b2ff7;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:8px">Choose API</p>
-      <div class="api-grid" id="apiGrid"></div>
-      <button class="btn" style="width:100%" onclick="doSearch()">🔍 Search Now</button>
+      <button class="btn" style="width:100%; padding:15px; font-size:15px;" onclick="doSearch()">🔍 Search All APIs</button>
     </div>
   </div>
 </div>
@@ -117,32 +107,25 @@
 <div class="modal" id="resModal">
   <div class="mc">
     <div class="mh">
-      <h2 style="font-size:15px;color:#00d4ff">📋 Number Information</h2>
+      <h2 style="font-size:15px;color:#00d4ff">📋 API Scan Results</h2>
       <button class="x" onclick="closeM('resModal')">✕</button>
     </div>
     <div id="resBody"></div>
   </div>
 </div>
 
-<!-- RECHARGE MODAL -->
+<!-- RECHARGE MODAL (Same as before) -->
 <div class="modal" id="rcModal">
   <div class="mc" style="max-width:480px">
     <div class="mh">
       <h2 style="font-size:15px;color:#00d4ff">💳 Recharge Credits</h2>
       <button class="x" onclick="closeM('rcModal')">✕</button>
     </div>
-
     <div id="rc1">
       <p style="font-size:12px;color:#aaa;margin-bottom:12px">1 search = ₹10. Min recharge ₹10.</p>
-      <div class="api-grid" style="grid-template-columns:repeat(3,1fr)">
-        <div class="api-opt" onclick="pickAmt(this,50)"><div class="name">₹50</div></div>
-        <div class="api-opt" onclick="pickAmt(this,100)"><div class="name">₹100</div></div>
-        <div class="api-opt" onclick="pickAmt(this,500)"><div class="name">₹500</div></div>
-      </div>
-      <input type="number" id="customAmt" placeholder="Custom amount (min ₹10)" min="10">
+      <input type="number" id="customAmt" placeholder="Enter amount (min ₹10)" min="10">
       <button class="btn" style="width:100%" onclick="genQR()">📱 Generate QR Code</button>
     </div>
-
     <div id="rc2" class="hidden" style="text-align:center">
       <p style="font-size:12px;color:#aaa">Scan with GPay / PhonePe / Paytm / BHIM</p>
       <h3 id="qrAmt" style="color:#00ffa3;font-size:24px;margin:8px 0 14px">₹0</h3>
@@ -159,13 +142,12 @@
         <button class="btn" style="flex:2" onclick="submitPay()">✅ I Have Paid</button>
       </div>
       <p style="font-size:11px;color:#ff6b6b;margin-top:10px">⚠️ Admin verify ചെയ്തതിന് ശേഷം credits add ആകും</p>
-      <div id="rcMsg" style="margin-top:10px"></div>
     </div>
   </div>
 </div>
 
 <script>
-let me = null, apis = [], selApi = 1, rcAmt = 0, qrData = null;
+let me = null, rcAmt = 0, qrData = null;
 
 function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));}
 function closeM(id){document.getElementById(id).classList.remove('on');}
@@ -195,8 +177,6 @@ async function checkAuth() {
     document.getElementById('mainDash').classList.remove('hidden');
     document.getElementById('userName').textContent = '👤 ' + me.name;
     document.getElementById('creditBadge').textContent = '₹' + me.credits;
-    apis = await call('/api/public/apis');
-    renderApis();
   } catch (e) {
     showLogin();
   }
@@ -226,156 +206,4 @@ async function doUserLogin() {
 }
 
 async function doLogout() {
-  await fetch('/api/user/logout', { method:'POST', credentials:'same-origin' });
-  window.location.reload();
-}
-
-function renderApis() {
-  const g = document.getElementById('apiGrid');
-  g.innerHTML = '';
-  apis.filter(a => a.active).forEach(a => {
-    const d = document.createElement('div');
-    d.className = 'api-opt' + (a.id === selApi ? ' sel' : '');
-    d.innerHTML = `<div class="name">${esc(a.name)}</div><div class="price">₹${a.price}</div>`;
-    d.onclick = () => { selApi = a.id; renderApis(); };
-    g.appendChild(d);
-  });
-}
-
-document.getElementById('phone').addEventListener('input', e => {
-  e.target.value = e.target.value.replace(/\D/g,'').slice(0,10);
-});
-
-async function doSearch() {
-  const phone = document.getElementById('phone').value.trim();
-  if (!/^\d{10}$/.test(phone)) return alert('Enter valid 10-digit number');
-
-  document.getElementById('resModal').classList.add('on');
-  document.getElementById('resBody').innerHTML =
-    '<div class="loader on"><div class="sp"></div><p style="font-size:12px;color:#aaa">Fetching data from server...</p></div>';
-
-  try {
-    const res = await call('/api/search', { method:'POST', body:{ phone, apiId: selApi }});
-    me.credits = res.remainingCredits;
-    document.getElementById('creditBadge').textContent = '₹' + res.remainingCredits;
-    
-    // ഡാറ്റ റെൻഡർ ചെയ്യുന്ന ഫങ്ക്ഷൻ വിളിക്കുന്നു
-    renderResult(res.data, res.charged, res.apiName);
-  } catch (e) {
-    document.getElementById('resBody').innerHTML = `<div class="alert a-err">❌ ${esc(e.message)}</div>`;
-  }
-}
-
-// 👇 പുതിയ JSON ഡാറ്റ പ്രകാരം റെൻഡർ ചെയ്യുന്ന ഫങ്ക്ഷൻ
-function renderResult(raw, charged, apiName) {
-  const body = document.getElementById('resBody');
-  let html = `<div class="alert a-ok">✅ Charged ₹${charged} • Remaining ₹${me.credits}</div>`;
-  
-  const data = raw.Data || raw.data || raw;
-  
-  // ഡാറ്റ ഉണ്ടോ എന്ന് ചെക്ക് ചെയ്യുന്നു
-  if (!data || Object.keys(data).length === 0) {
-    body.innerHTML = html + `<div class="alert a-err">❌ No data found for this number.</div>`;
-    return;
-  }
-
-  let hasData = false;
-
-  // 1️⃣ Main≠Details (Basic Info)
-  if (data['Main≠Details'] && data['Main≠Details'].Details && data['Main≠Details'].Details.length > 0) {
-    hasData = true;
-    html += `<div class="sec-title">📌 Main Details</div>`;
-    data['Main≠Details'].Details.forEach(item => {
-      html += '<div class="ic">';
-      Object.entries(item).forEach(([k, v]) => {
-        if (!v) return;
-        let hiClass = (k === 'Full Name' || k === 'Phone' || k === 'Mobile 2') ? 'hi' : '';
-        html += `<div class="row"><span class="lbl">${esc(k)}</span><span class="val ${hiClass}">${esc(v)}</span></div>`;
-      });
-      html += '</div>';
-    });
-  }
-
-  // 2️⃣ Data-2 (Advanced Info)
-  if (data['Data-2'] && data['Data-2'].Details && data['Data-2'].Details.length > 0) {
-    hasData = true;
-    html += `<div class="sec-title" style="color:#7b2ff7;border-left-color:#7b2ff7;">📌 Advanced Details</div>`;
-    data['Data-2'].Details.forEach(item => {
-      html += '<div class="ic">';
-      Object.entries(item).forEach(([k, v]) => {
-        if (!v) return;
-        let hiClass = (k === 'Name' || k === 'Surname' || k === 'Phone') ? 'hi' : '';
-        html += `<div class="row"><span class="lbl">${esc(k)}</span><span class="val ${hiClass}">${esc(v)}</span></div>`;
-      });
-      html += '</div>';
-    });
-  }
-
-  // 3️⃣ Data-3 (Location / Provider Info)
-  if (data['Data-3'] && data['Data-3'].Details && data['Data-3'].Details.length > 0) {
-    hasData = true;
-    html += `<div class="sec-title" style="color:#ffaa00;border-left-color:#ffaa00;">📌 Location & Provider</div>`;
-    data['Data-3'].Details.forEach(item => {
-      html += '<div class="ic">';
-      Object.entries(item).forEach(([k, v]) => {
-        if (!v) return;
-        let hiClass = (k === 'Full Name' || k === 'Phone') ? 'hi' : '';
-        html += `<div class="row"><span class="lbl">${esc(k)}</span><span class="val ${hiClass}">${esc(v)}</span></div>`;
-      });
-      html += '</div>';
-    });
-  }
-
-  if (!hasData) {
-    body.innerHTML = html + `<div class="alert a-err">❌ No valid data records found in response.</div>`;
-  } else {
-    body.innerHTML = html;
-  }
-}
-
-// Recharge Functions
-function openRecharge() { document.getElementById('rcModal').classList.add('on'); back1(); }
-function pickAmt(el, amt) {
-  document.querySelectorAll('#rc1 .api-opt').forEach(x => x.classList.remove('sel'));
-  el.classList.add('sel');
-  document.getElementById('customAmt').value = '';
-  rcAmt = amt;
-}
-async function genQR() {
-  const c = Number(document.getElementById('customAmt').value);
-  if (c >= 10) rcAmt = c;
-  if (!rcAmt || rcAmt < 10) return alert('Minimum ₹10');
-
-  try {
-    const res = await call('/api/public/genqr', { method:'POST', body:{ amount: rcAmt }});
-    qrData = res;
-    document.getElementById('qrImg').src = res.qrImage;
-    document.getElementById('qrAmt').textContent = '₹' + res.amount;
-    document.getElementById('upiShow').textContent = res.upiId;
-    document.getElementById('txnIn').value = '';
-    document.getElementById('rc1').classList.add('hidden');
-    document.getElementById('rc2').classList.remove('hidden');
-  } catch (e) { alert(e.message); }
-}
-function back1() {
-  document.getElementById('rc1').classList.remove('hidden');
-  document.getElementById('rc2').classList.add('hidden');
-}
-async function submitPay() {
-  const txn = document.getElementById('txnIn').value.trim();
-  if (txn.length < 6) return alert('Enter valid Txn ID');
-  try {
-    await call('/api/recharge', { method:'POST', body:{ amount: rcAmt, txnId: txn, txnRef: qrData?.txnRef }});
-    alert('✅ Submitted! Admin will verify it soon.');
-    closeM('rcModal');
-    rcAmt = 0; qrData = null;
-    document.querySelectorAll('#rc1 .api-opt').forEach(x => x.classList.remove('sel'));
-    document.getElementById('customAmt').value = '';
-  } catch (e) { alert(e.message); }
-}
-
-// ആപ്പ് സ്റ്റാർട്ട്
-checkAuth();
-</script>
-</body>
-       </html>
+  await fetch('/api/user/logout', { method:'POST',
