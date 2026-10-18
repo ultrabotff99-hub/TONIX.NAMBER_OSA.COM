@@ -41,34 +41,19 @@ const UPI_CONFIG = { upiId: 'farispachukk@oksbi', payeeName: 'Cyber Security Too
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
-
 app.set('trust proxy', 1);
 
 app.use(session({
   secret: process.env.SESSION_SECRET || 'cyber_tool_secret_key_2026',
   resave: false,
   saveUninitialized: false,
-  cookie: {
-    secure: process.env.NODE_ENV === 'production', 
-    httpOnly: true,
-    sameSite: 'lax',
-    maxAge: 24 * 60 * 60 * 1000
-  }
+  cookie: { secure: process.env.NODE_ENV === 'production', httpOnly: true, sameSite: 'lax', maxAge: 24 * 60 * 60 * 1000 }
 }));
 
-// Rate limiters
 const apiLimiter = rateLimit({ windowMs: 60 * 1000, max: 20, message: { error: 'Slow down.' } });
 
-// Audit logger
 function audit(db, action, details, req) {
-  db.auditLogs.push({
-    id: Date.now(),
-    action, details,
-    ip: req.ip || req.connection.remoteAddress,
-    ua: req.headers['user-agent'] || '',
-    user: req.session?.username || req.session?.userId || 'guest',
-    timestamp: new Date().toISOString()
-  });
+  db.auditLogs.push({ id: Date.now(), action, details, ip: req.ip, user: req.session?.username || 'guest', timestamp: new Date().toISOString() });
   if (db.auditLogs.length > 5000) db.auditLogs = db.auditLogs.slice(-3000);
 }
 
@@ -88,8 +73,6 @@ function requireAdmin(req, res, next) {
 }
 
 // ============ USER ROUTES ============
-
-// 1. യൂസർ ലോഗിൻ (യൂസർനെയിം മാത്രം)
 app.post('/api/user/login', async (req, res) => {
   const { username } = req.body;
   if (!username) return res.status(400).json({ error: 'Username required' });
@@ -104,73 +87,58 @@ app.post('/api/user/login', async (req, res) => {
     }
     return res.status(403).json({ error: '⏳ Admin approval pending. Please wait.' });
   }
-
   if (user.blocked) return res.status(403).json({ error: 'Account blocked by admin' });
 
   req.session.userId = user.id;
   req.session.username = user.username;
   saveDB(db);
-  
   res.json({ success: true, user: { name: user.username, credits: user.credits } });
 });
 
-app.post('/api/user/logout', (req, res) => {
-  req.session.destroy();
-  res.json({ success: true });
-});
+app.post('/api/user/logout', (req, res) => { req.session.destroy(); res.json({ success: true }); });
+app.get('/api/me', requireUser, (req, res) => res.json({ name: req.user.username, credits: req.user.credits, totalSpent: req.user.totalSpent || 0 }));
 
-app.get('/api/me', requireUser, (req, res) => {
-  res.json({ name: req.user.username, credits: req.user.credits, totalSpent: req.user.totalSpent || 0 });
-});
-
-// 2. അൾട്രാ സെർച്ച് (മൂന്ന് API-കളിൽ നിന്നും ഒരുമിച്ച് ഡാറ്റ എടുക്കുന്നു)
+// ============ SMART SEARCH ROUTE ============
 app.post('/api/search', requireUser, apiLimiter, async (req, res) => {
   const { phone } = req.body;
   if (!/^\d{10}$/.test(phone)) return res.status(400).json({ error: 'Invalid 10-digit number' });
 
   const db = loadDB();
   const user = db.users.find(u => u.id === req.session.userId);
-  
-  // ആക്ടീവ് ആയ എല്ലാ API-കളും എടുക്കുന്നു
   const activeApis = db.apis.filter(a => a.active);
-  if (activeApis.length === 0) return res.status(400).json({ error: 'No active APIs available' });
 
-  // മൂന്ന് API-കളുടെയും ആകെ വില കണക്കാക്കുന്നു
   const totalCost = activeApis.reduce((sum, api) => sum + (api.price || 10), 0);
-  
-  if (user.credits < totalCost) {
-    return res.status(402).json({ error: `Need ₹${totalCost} to search all APIs. Recharge first.` });
-  }
+  if (user.credits < totalCost) return res.status(402).json({ error: `Need ₹${totalCost} to search all APIs. Recharge first.` });
 
-  // എല്ലാ API-കളിലേക്കും ഒരുമിച്ച് റിക്വസ്റ്റ് അയക്കുന്നു
-  const results = {};
   let chargedAmount = 0;
 
   const fetchPromises = activeApis.map(async (api) => {
     try {
-      // ഡെയിലി ലിമിറ്റ് ചെക്ക്
       if (api.lastReset !== today()) { api.usedToday = 0; api.lastReset = today(); }
-      if (api.usedToday >= api.dailyLimit) {
-        return { apiId: api.id, name: api.name, error: 'API daily limit reached' };
-      }
+      if (api.usedToday >= api.dailyLimit) return { apiId: api.id, name: api.name, error: 'API daily limit reached' };
 
+      // 20 സെക്കൻഡ് ടൈംഔട്ട്, കൂടാതെ User-Agent നിർബന്ധമായും നൽകുന്നു
       const response = await axios.get(api.url + phone, { 
         timeout: 20000,
-        headers: { 'User-Agent': 'Mozilla/5.0' }
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
       });
       
       const data = response.data;
-      const apiData = data.Data || data.data || data;
       
-      // ഡാറ്റ ഉണ്ടോ എന്ന് ചെക്ക് ചെയ്യുന്നു
+      // ഡാറ്റയുടെ ഫോർമാറ്റ് എന്തുതന്നെയായാലും പരിശോധിക്കുന്നു (Smart Check)
       let hasData = false;
-      if (apiData['Main≠Details']?.Details?.length > 0) hasData = true;
-      if (apiData['Data-2']?.Details?.length > 0) hasData = true;
-      if (apiData['Data-3']?.Details?.length > 0) hasData = true;
-      if (apiData.Details?.length > 0) hasData = true;
+      const innerData = data.Data || data.data || data;
+      
+      if (innerData && Object.keys(innerData).length > 0) {
+        // പുതിയ ഫോർമാറ്റ് (mobile, name ഉള്ളത്)
+        if (innerData.data && Object.keys(innerData.data).length > 0) hasData = true;
+        // പഴയ ഫോർമാറ്റ് (Main≠Details, Data-2 ഉള്ളത്)
+        else if (innerData['Main≠Details']?.Details?.length > 0 || innerData['Data-2']?.Details?.length > 0 || innerData['Data-3']?.Details?.length > 0) hasData = true;
+        // വേറെ ഏതെങ്കിലും ഫോർമാറ്റ് ആണെങ്കിൽ
+        else if (!innerData.error && !innerData.success === false) hasData = true;
+      }
 
       if (hasData) {
-        // ഡാറ്റ കിട്ടിയാൽ മാത്രം ക്രെഡിറ്റ് കുറയ്ക്കുന്നു
         chargedAmount += (api.price || 10);
         api.usedToday++;
         return { apiId: api.id, name: api.name, data: data };
@@ -178,75 +146,55 @@ app.post('/api/search', requireUser, apiLimiter, async (req, res) => {
         return { apiId: api.id, name: api.name, error: 'No data found for this number' };
       }
     } catch (err) {
-      return { apiId: api.id, name: api.name, error: 'API failed or timeout' };
+      console.error(`API ${api.name} Error:`, err.message);
+      return { apiId: api.id, name: api.name, error: 'API failed or timeout (Server Error)' };
     }
   });
 
   const fetchResults = await Promise.all(fetchPromises);
 
-  // ക്രെഡിറ്റ് കുറയ്ക്കുന്നു
   user.credits -= chargedAmount;
   user.totalSpent = (user.totalSpent || 0) + chargedAmount;
-  
   db.searches.push({ id: Date.now(), userId: user.id, username: user.username, phone, cost: chargedAmount, timestamp: new Date().toISOString() });
   saveDB(db);
 
-  // ഫ്രണ്ട് എൻഡിലേക്ക് റിസൾട്ട് അയക്കുന്നു
-  res.json({ 
-    success: true, 
-    charged: chargedAmount, 
-    remainingCredits: user.credits, 
-    results: fetchResults 
-  });
+  res.json({ success: true, charged: chargedAmount, remainingCredits: user.credits, results: fetchResults });
 });
 
-// 3. റീചാർജ് QR
+// ============ OTHER USER & ADMIN ROUTES ============
 app.post('/api/public/genqr', requireUser, (req, res) => {
   const amt = Number(req.body.amount);
   if (!amt || amt < 10) return res.status(400).json({ error: 'Minimum ₹10' });
-
   const txnRef = 'TXN' + Date.now();
   const upiLink = `upi://pay?pa=${encodeURIComponent(UPI_CONFIG.upiId)}&pn=${encodeURIComponent(UPI_CONFIG.payeeName)}&am=${amt}&cu=INR&tn=Recharge&tr=${txnRef}`;
   const qrImage = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(upiLink)}`;
   res.json({ success: true, upiLink, qrImage, txnRef, amount: amt, upiId: UPI_CONFIG.upiId });
 });
-
 app.post('/api/recharge', requireUser, (req, res) => {
   const { amount, txnId } = req.body;
   const amt = Number(amount);
   if (!amt || amt < 10) return res.status(400).json({ error: 'Minimum ₹10' });
   if (!txnId || txnId.length < 6) return res.status(400).json({ error: 'Invalid Txn ID' });
-
   const db = loadDB();
   if (db.payments.find(p => p.txnId === txnId)) return res.status(400).json({ error: 'Txn ID already submitted' });
-
   db.payments.push({ id: Date.now(), userId: req.user.id, username: req.user.username, amount: amt, method: 'upi', txnId, status: 'pending', timestamp: new Date().toISOString() });
   saveDB(db);
   res.json({ success: true, message: 'Submitted. Admin will verify soon.' });
 });
-
 app.get('/api/public/apis', requireUser, (req, res) => {
   const db = loadDB();
   res.json(db.apis.filter(a => a.active).map(a => ({ id: a.id, name: a.name, price: a.price })));
 });
 
-// ============ ADMIN ROUTES (Same as before) ============
 app.get('/admin', (req, res) => {
   const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '3007';
   if (req.query.pass === ADMIN_PASSWORD) {
     req.session.isAdmin = true;
-    req.session.save((err) => {
-      if (err) return res.status(500).send("Session error");
-      res.sendFile(path.join(__dirname, 'public', 'admin.html'));
-    });
-  } else {
-    res.status(401).send(`<body style="background:#0a0e27;color:#fff;text-align:center;padding:50px;font-family:sans-serif;"><h2 style="color:#ff6b6b;">⛔ Unauthorized Access</h2></body>`);
-  }
+    req.session.save((err) => { if (err) return res.status(500).send("Session error"); res.sendFile(path.join(__dirname, 'public', 'admin.html')); });
+  } else { res.status(401).send(`<body style="background:#0a0e27;color:#fff;text-align:center;padding:50px;font-family:sans-serif;"><h2 style="color:#ff6b6b;">⛔ Unauthorized Access</h2></body>`); }
 });
-
 app.get('/api/admin/check', (req, res) => res.json({ isAdmin: !!req.session.isAdmin }));
 app.post('/api/admin/logout', (req, res) => { req.session.isAdmin = false; res.json({ success: true }); });
-
 app.get('/api/admin/pending', requireAdmin, (req, res) => res.json(loadDB().pendingUsers));
 app.post('/api/admin/approve-user', requireAdmin, (req, res) => {
   const db = loadDB();
@@ -254,86 +202,49 @@ app.post('/api/admin/approve-user', requireAdmin, (req, res) => {
   if (idx === -1) return res.status(404).json({ error: 'Not found' });
   const p = db.pendingUsers[idx];
   db.users.push({ id: p.id, username: p.username, approved: true, blocked: false, credits: 0, totalSpent: 0, createdAt: p.createdAt });
-  db.pendingUsers.splice(idx, 1);
-  saveDB(db);
-  res.json({ success: true });
+  db.pendingUsers.splice(idx, 1); saveDB(db); res.json({ success: true });
 });
 app.post('/api/admin/reject-user', requireAdmin, (req, res) => {
-  const db = loadDB();
-  db.pendingUsers = db.pendingUsers.filter(p => p.id !== req.body.userId);
-  saveDB(db);
-  res.json({ success: true });
+  const db = loadDB(); db.pendingUsers = db.pendingUsers.filter(p => p.id !== req.body.userId); saveDB(db); res.json({ success: true });
 });
-
 app.get('/api/admin/users', requireAdmin, (req, res) => res.json(loadDB().users));
 app.post('/api/admin/user/block', requireAdmin, (req, res) => {
-  const db = loadDB();
-  const u = db.users.find(x => x.id === req.body.userId);
-  if (u) { u.blocked = !!req.body.blocked; saveDB(db); res.json({ success: true }); }
-  else res.status(404).json({ error: 'Not found' });
+  const db = loadDB(); const u = db.users.find(x => x.id === req.body.userId);
+  if (u) { u.blocked = !!req.body.blocked; saveDB(db); res.json({ success: true }); } else res.status(404).json({ error: 'Not found' });
 });
 app.post('/api/admin/user/credits', requireAdmin, (req, res) => {
-  const db = loadDB();
-  const u = db.users.find(x => x.id === req.body.userId);
-  if (u) { u.credits += Number(req.body.delta); saveDB(db); res.json({ success: true, credits: u.credits }); }
-  else res.status(404).json({ error: 'Not found' });
+  const db = loadDB(); const u = db.users.find(x => x.id === req.body.userId);
+  if (u) { u.credits += Number(req.body.delta); saveDB(db); res.json({ success: true, credits: u.credits }); } else res.status(404).json({ error: 'Not found' });
 });
 app.delete('/api/admin/user/:id', requireAdmin, (req, res) => {
-  const db = loadDB();
-  db.users = db.users.filter(x => x.id != req.params.id);
-  saveDB(db);
-  res.json({ success: true });
+  const db = loadDB(); db.users = db.users.filter(x => x.id != req.params.id); saveDB(db); res.json({ success: true });
 });
-
 app.get('/api/admin/payments', requireAdmin, (req, res) => res.json(loadDB().payments.sort((a,b) => b.id - a.id)));
 app.post('/api/admin/payment/approve', requireAdmin, (req, res) => {
-  const db = loadDB();
-  const p = db.payments.find(x => x.id === req.body.paymentId);
-  if (p && p.status === 'pending') {
-    const user = db.users.find(u => u.id === p.userId);
-    if (user) user.credits += p.amount;
-    p.status = 'approved'; saveDB(db); res.json({ success: true });
-  } else res.status(400).json({ error: 'Invalid' });
+  const db = loadDB(); const p = db.payments.find(x => x.id === req.body.paymentId);
+  if (p && p.status === 'pending') { const user = db.users.find(u => u.id === p.userId); if (user) user.credits += p.amount; p.status = 'approved'; saveDB(db); res.json({ success: true }); } else res.status(400).json({ error: 'Invalid' });
 });
 app.post('/api/admin/payment/reject', requireAdmin, (req, res) => {
-  const db = loadDB();
-  const p = db.payments.find(x => x.id === req.body.paymentId);
-  if (p && p.status === 'pending') { p.status = 'rejected'; saveDB(db); res.json({ success: true }); }
-  else res.status(400).json({ error: 'Invalid' });
+  const db = loadDB(); const p = db.payments.find(x => x.id === req.body.paymentId);
+  if (p && p.status === 'pending') { p.status = 'rejected'; saveDB(db); res.json({ success: true }); } else res.status(400).json({ error: 'Invalid' });
 });
-
 app.get('/api/admin/apis', requireAdmin, (req, res) => res.json(loadDB().apis));
 app.post('/api/admin/apis', requireAdmin, (req, res) => {
-  const db = loadDB();
-  db.apis.push({ id: Date.now(), name: req.body.name, url: req.body.url, price: Number(req.body.price) || 10, dailyLimit: Number(req.body.dailyLimit) || 1000, usedToday: 0, lastReset: today(), active: true });
-  saveDB(db); res.json({ success: true });
+  const db = loadDB(); db.apis.push({ id: Date.now(), name: req.body.name, url: req.body.url, price: Number(req.body.price) || 10, dailyLimit: Number(req.body.dailyLimit) || 1000, usedToday: 0, lastReset: today(), active: true }); saveDB(db); res.json({ success: true });
 });
 app.put('/api/admin/apis/:id', requireAdmin, (req, res) => {
-  const db = loadDB();
-  const api = db.apis.find(a => a.id == req.params.id);
-  if (api) { Object.assign(api, req.body); saveDB(db); res.json({ success: true }); }
-  else res.status(404).json({ error: 'Not found' });
+  const db = loadDB(); const api = db.apis.find(a => a.id == req.params.id);
+  if (api) { Object.assign(api, req.body); saveDB(db); res.json({ success: true }); } else res.status(404).json({ error: 'Not found' });
 });
 app.delete('/api/admin/apis/:id', requireAdmin, (req, res) => {
-  const db = loadDB();
-  db.apis = db.apis.filter(a => a.id != req.params.id);
-  saveDB(db); res.json({ success: true });
+  const db = loadDB(); db.apis = db.apis.filter(a => a.id != req.params.id); saveDB(db); res.json({ success: true });
 });
-
 app.get('/api/admin/audit', requireAdmin, (req, res) => res.json(loadDB().auditLogs.slice(-200).reverse()));
 app.get('/api/admin/searches', requireAdmin, (req, res) => res.json(loadDB().searches.slice(-200).reverse()));
-
 app.get('/api/admin/stats', requireAdmin, (req, res) => {
   const db = loadDB();
-  res.json({
-    totalUsers: db.users.length, pendingUsers: db.pendingUsers.length,
-    blockedUsers: db.users.filter(u => u.blocked).length, totalSearches: db.searches.length,
-    totalRevenue: db.payments.filter(p => p.status === 'approved').reduce((s,p) => s+p.amount, 0),
-    pendingPayments: db.payments.filter(p => p.status === 'pending').length
-  });
+  res.json({ totalUsers: db.users.length, pendingUsers: db.pendingUsers.length, blockedUsers: db.users.filter(u => u.blocked).length, totalSearches: db.searches.length, totalRevenue: db.payments.filter(p => p.status === 'approved').reduce((s,p) => s+p.amount, 0), pendingPayments: db.payments.filter(p => p.status === 'pending').length });
 });
-
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
-
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`🔒 Server running on port ${PORT}`));
