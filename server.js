@@ -19,6 +19,7 @@ function loadDB() {
       users: [],
       pendingUsers: [],
       apis: [
+        // URL-ൽ ?key=69d&q= എന്ന് കൃത്യമായി ഉണ്ടെന്ന് ഉറപ്പാക്കുക
         { id: 1, name: 'API-1 Basic',    url: 'https://osint.invalidayushh.workers.dev/num?key=69d&q=',    price: 10, dailyLimit: 1000, usedToday: 0, lastReset: today(), active: true },
         { id: 2, name: 'API-2 Advanced', url: 'https://osint.invalidayushh.workers.dev/numv2?key=69d&q=', price: 10, dailyLimit: 1000, usedToday: 0, lastReset: today(), active: true },
         { id: 3, name: 'API-3 Pakistan', url: 'https://osint.invalidayushh.workers.dev/pak?key=69d&q=',   price: 10, dailyLimit: 1000, usedToday: 0, lastReset: today(), active: true }
@@ -98,7 +99,7 @@ app.post('/api/user/login', async (req, res) => {
 app.post('/api/user/logout', (req, res) => { req.session.destroy(); res.json({ success: true }); });
 app.get('/api/me', requireUser, (req, res) => res.json({ name: req.user.username, credits: req.user.credits, totalSpent: req.user.totalSpent || 0 }));
 
-// ============ SMART SEARCH ROUTE ============
+// ============ SMART SEARCH ROUTE (FIXED) ============
 app.post('/api/search', requireUser, apiLimiter, async (req, res) => {
   const { phone } = req.body;
   if (!/^\d{10}$/.test(phone)) return res.status(400).json({ error: 'Invalid 10-digit number' });
@@ -117,25 +118,27 @@ app.post('/api/search', requireUser, apiLimiter, async (req, res) => {
       if (api.lastReset !== today()) { api.usedToday = 0; api.lastReset = today(); }
       if (api.usedToday >= api.dailyLimit) return { apiId: api.id, name: api.name, error: 'API daily limit reached' };
 
-      // 20 സെക്കൻഡ് ടൈംഔട്ട്, കൂടാതെ User-Agent നിർബന്ധമായും നൽകുന്നു
-      const response = await axios.get(api.url + phone, { 
-        timeout: 20000,
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+      // 👇 API URL കൃത്യമായി ജോഡിച്ചെടുക്കുന്നു (ഇവിടെയാണ് പ്രധാന തിരുത്തൽ)
+      const finalUrl = api.url + phone; 
+
+      const response = await axios.get(finalUrl, { 
+        timeout: 25000, // 25 സെക്കൻഡ് ടൈംഔട്ട്
+        headers: { 
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'application/json, text/plain, */*'
+        }
       });
       
       const data = response.data;
       
-      // ഡാറ്റയുടെ ഫോർമാറ്റ് എന്തുതന്നെയായാലും പരിശോധിക്കുന്നു (Smart Check)
+      // സ്മാർട്ട് ഡാറ്റ ചെക്കിംഗ്
       let hasData = false;
       const innerData = data.Data || data.data || data;
       
       if (innerData && Object.keys(innerData).length > 0) {
-        // പുതിയ ഫോർമാറ്റ് (mobile, name ഉള്ളത്)
         if (innerData.data && Object.keys(innerData.data).length > 0) hasData = true;
-        // പഴയ ഫോർമാറ്റ് (Main≠Details, Data-2 ഉള്ളത്)
         else if (innerData['Main≠Details']?.Details?.length > 0 || innerData['Data-2']?.Details?.length > 0 || innerData['Data-3']?.Details?.length > 0) hasData = true;
-        // വേറെ ഏതെങ്കിലും ഫോർമാറ്റ് ആണെങ്കിൽ
-        else if (!innerData.error && !innerData.success === false) hasData = true;
+        else if (data.success === true && data.developer) hasData = true; // API-1 ഫോർമാറ്റ്
       }
 
       if (hasData) {
@@ -147,7 +150,7 @@ app.post('/api/search', requireUser, apiLimiter, async (req, res) => {
       }
     } catch (err) {
       console.error(`API ${api.name} Error:`, err.message);
-      return { apiId: api.id, name: api.name, error: 'API failed or timeout (Server Error)' };
+      return { apiId: api.id, name: api.name, error: 'API failed or timeout (Check API URL/Server)' };
     }
   });
 
