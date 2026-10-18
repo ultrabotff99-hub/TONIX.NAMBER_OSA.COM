@@ -71,6 +71,7 @@
 </head>
 <body>
 
+<!-- LOGIN OVERLAY -->
 <div id="loginOverlay" class="overlay hidden">
   <div class="login-box">
     <h2>🔒 Enter Username</h2>
@@ -81,6 +82,7 @@
   </div>
 </div>
 
+<!-- MAIN DASHBOARD -->
 <div id="mainDash" class="hidden">
   <div class="nav">
     <h1>🔒 Cyber Tool <span style="font-size:11px;color:#ff6b6b">PRIVATE</span></h1>
@@ -114,7 +116,7 @@
   </div>
 </div>
 
-<!-- RECHARGE MODAL (Same as before) -->
+<!-- RECHARGE MODAL -->
 <div class="modal" id="rcModal">
   <div class="mc" style="max-width:480px">
     <div class="mh">
@@ -149,6 +151,7 @@
 <script>
 let me = null, rcAmt = 0, qrData = null;
 
+// HTML എസ്കേപ്പ് ചെയ്യാൻ (XSS തടയാൻ)
 function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));}
 function closeM(id){document.getElementById(id).classList.remove('on');}
 
@@ -223,9 +226,7 @@ async function doSearch() {
     '<div class="loader on"><div class="sp"></div><p style="font-size:12px;color:#aaa">Scanning all APIs. Please wait...</p></div>';
 
   try {
-    // API ID അയക്കേണ്ടതില്ല, സെർവർ എല്ലാ ആക്ടീവ് API-കളിൽ നിന്നും എടുക്കും
     const res = await call('/api/search', { method:'POST', body:{ phone }});
-    
     me.credits = res.remainingCredits;
     document.getElementById('creditBadge').textContent = '₹' + res.remainingCredits;
     
@@ -235,78 +236,63 @@ async function doSearch() {
   }
 }
 
-// 👇 മൂന്ന് API-കളുടെയും റിസൾട്ട് കാണിക്കുന്ന പുതിയ ഫങ്ക്ഷൻ
+// സ്മാർട്ട് ഡാറ്റ പാർസിംഗ് ഫങ്ക്ഷൻ
 function renderResults(resultsArray, charged) {
   const body = document.getElementById('resBody');
   let html = `<div class="alert a-ok">✅ Total Charged: ₹${charged} • Remaining: ₹${me.credits}</div>`;
   
-  let foundAnyData = false;
-
   resultsArray.forEach(apiRes => {
-    // API പേര് കാണിക്കുന്നു
     html += `<div style="margin-top:20px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:5px; display:flex; justify-content:space-between; align-items:center;">
       <span style="color:#00d4ff; font-weight:bold; font-size:14px;">${esc(apiRes.name)}</span>
     </div>`;
 
-    // എറർ ഉണ്ടെങ്കിൽ (ഡാറ്റ ഇല്ലെങ്കിൽ)
     if (apiRes.error) {
       html += `<div class="alert a-err" style="margin-top:10px; font-size:12px;">❌ ${esc(apiRes.error)}</div>`;
       return;
     }
 
-    // ഡാറ്റ ഉണ്ടെങ്കിൽ പാർസ് ചെയ്ത് കാണിക്കുന്നു
     const data = apiRes.data.Data || apiRes.data.data || apiRes.data;
-    let hasData = false;
-    let sectionHtml = '';
+    let detailsArray = [];
 
-    // 1. Main≠Details
-    if (data['Main≠Details'] && data['Main≠Details'].Details?.length > 0) {
-      hasData = true;
-      sectionHtml += `<div class="ic">`;
-      data['Main≠Details'].Details.forEach(item => {
-        Object.entries(item).forEach(([k, v]) => {
-          if (!v) return;
-          let hiClass = (k === 'Full Name' || k === 'Phone' || k === 'Mobile 2') ? 'hi' : '';
-          sectionHtml += `<div class="row"><span class="lbl">${esc(k)}</span><span class="val ${hiClass}">${esc(v)}</span></div>`;
-        });
+    // 1. പുതിയ ഫോർമാറ്റ് (mobile, name, address ഉള്ളത് - screenshot-ൽ ഉള്ളത്)
+    if (data.data && typeof data.data === 'object') {
+      detailsArray = [data.data];
+    }
+    // 2. പഴയ ഫോർമാറ്റ് (Main≠Details)
+    else if (data['Main≠Details'] && data['Main≠Details'].Details) {
+      detailsArray = data['Main≠Details'].Details;
+    } 
+    // 3. മറ്റു ഫോർമാറ്റുകൾ
+    else if (data['Data-2'] && data['Data-2'].Details) {
+      detailsArray = data['Data-2'].Details;
+    } 
+    else if (data['Data-3'] && data['Data-3'].Details) {
+      detailsArray = data['Data-3'].Details;
+    }
+    else if (data.Details) {
+      detailsArray = data.Details;
+    }
+    else if (typeof data === 'object' && Object.keys(data).length > 0 && data.success !== false) {
+      detailsArray = [data]; // അറിയാത്ത ഫോർമാറ്റ് ആണെങ്കിൽ നേരിട്ട് എടുക്കുന്നു
+    }
+
+    if (!detailsArray || detailsArray.length === 0) {
+      html += `<div class="alert a-err" style="margin-top:10px; font-size:12px;">No valid records found.</div>`;
+      return;
+    }
+
+    detailsArray.forEach(item => {
+      html += '<div class="ic">';
+      Object.entries(item).forEach(([k, v]) => {
+        if (!v || v === 'N/A' || v === 'null') return;
+        
+        let hiClass = (k.toLowerCase() === 'name' || k.toLowerCase() === 'full name' || k.toLowerCase() === 'mobile' || k.toLowerCase() === 'phone') ? 'hi' : '';
+        let displayKey = k.replace(/_/g, ' ').toUpperCase();
+
+        html += `<div class="row"><span class="lbl">${esc(displayKey)}</span><span class="val ${hiClass}">${esc(String(v))}</span></div>`;
       });
-      sectionHtml += `</div>`;
-    }
-
-    // 2. Data-2
-    if (data['Data-2'] && data['Data-2'].Details?.length > 0) {
-      hasData = true;
-      sectionHtml += `<div class="ic">`;
-      data['Data-2'].Details.forEach(item => {
-        Object.entries(item).forEach(([k, v]) => {
-          if (!v) return;
-          let hiClass = (k === 'Name' || k === 'Surname' || k === 'Phone') ? 'hi' : '';
-          sectionHtml += `<div class="row"><span class="lbl">${esc(k)}</span><span class="val ${hiClass}">${esc(v)}</span></div>`;
-        });
-      });
-      sectionHtml += `</div>`;
-    }
-
-    // 3. Data-3
-    if (data['Data-3'] && data['Data-3'].Details?.length > 0) {
-      hasData = true;
-      sectionHtml += `<div class="ic">`;
-      data['Data-3'].Details.forEach(item => {
-        Object.entries(item).forEach(([k, v]) => {
-          if (!v) return;
-          let hiClass = (k === 'Full Name' || k === 'Phone') ? 'hi' : '';
-          sectionHtml += `<div class="row"><span class="lbl">${esc(k)}</span><span class="val ${hiClass}">${esc(v)}</span></div>`;
-        });
-      });
-      sectionHtml += `</div>`;
-    }
-
-    if (hasData) {
-      foundAnyData = true;
-      html += sectionHtml;
-    } else {
-      html += `<div class="alert a-err" style="margin-top:10px; font-size:12px;">No data found in this API</div>`;
-    }
+      html += '</div>';
+    });
   });
 
   body.innerHTML = html;
@@ -346,7 +332,8 @@ async function submitPay() {
   } catch (e) { alert(e.message); }
 }
 
+// ആപ്പ് സ്റ്റാർട്ട് ചെയ്യുമ്പോൾ ഓത് ചെക്ക് ചെയ്യുന്നു
 checkAuth();
 </script>
 </body>
-       </html>
+                                                                        </html>
