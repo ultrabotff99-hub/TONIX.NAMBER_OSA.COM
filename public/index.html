@@ -3,10 +3,23 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🔒 Cyber OSI Tool — Dashboard</title>
+<title>🔒 Cyber Tool — Dashboard</title>
 <style>
   *{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI',sans-serif}
   body{min-height:100vh;background:linear-gradient(135deg,#0a0e27,#1a1a3e);color:#fff;padding:20px}
+  .hidden{display:none!important}
+  
+  /* Login Overlay Styles */
+  .overlay{position:fixed;inset:0;background:#0a0e27;z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;}
+  .login-box{background:rgba(255,255,255,0.05);padding:30px;border-radius:15px;border:1px solid rgba(255,255,255,0.1);max-width:380px;width:100%;text-align:center;}
+  .login-box h2{color:#00d4ff;margin-bottom:10px;font-size:20px;}
+  .login-box p{font-size:12px;color:#aaa;margin-bottom:20px;}
+  .login-box input{width:100%;padding:13px;border-radius:10px;border:1px solid rgba(255,255,255,0.2);background:rgba(0,0,0,0.4);color:#fff;margin-bottom:15px;outline:none;font-size:15px;}
+  .login-box input:focus{border-color:#00d4ff;}
+  .login-box button{width:100%;padding:13px;background:linear-gradient(90deg,#00d4ff,#7b2ff7);border:none;border-radius:10px;color:#fff;font-weight:bold;cursor:pointer;font-size:15px;}
+  .login-box .err{color:#ff6b6b;font-size:12px;margin-top:15px;}
+
+  /* Dashboard Styles */
   .nav{max-width:900px;margin:0 auto 24px;display:flex;justify-content:space-between;align-items:center;
     background:rgba(255,255,255,0.04);padding:14px 20px;border-radius:14px;border:1px solid rgba(255,255,255,0.1)}
   .nav h1{font-size:16px;color:#00d4ff}
@@ -54,30 +67,43 @@
   .alert{padding:11px;border-radius:9px;font-size:13px;margin-bottom:12px;text-align:center}
   .a-err{background:rgba(255,0,0,0.13);border:1px solid rgba(255,0,0,0.35);color:#ff6b6b}
   .a-ok{background:rgba(0,255,163,0.13);border:1px solid rgba(0,255,163,0.35);color:#00ffa3}
-  .hidden{display:none!important}
 </style>
 </head>
 <body>
 
-<div class="nav">
-  <h1>🔒 Cyber Tool <span style="font-size:11px;color:#ff6b6b">PRIVATE</span></h1>
-  <div class="nav-right">
-    <span class="credit" id="creditBadge">₹0</span>
-    <span id="userName" style="color:#aaa"></span>
-    <button class="btn btn-ghost" onclick="openRecharge()">💳 Recharge</button>
-    <button class="btn btn-ghost" onclick="doLogout()">Logout</button>
+<!-- 1. LOGIN OVERLAY (യൂസർനെയിം ചോദിക്കാൻ) -->
+<div id="loginOverlay" class="overlay hidden">
+  <div class="login-box">
+    <h2>🔒 Enter Username</h2>
+    <p>അഡ്മിൻ അപ്രൂവ് ചെയ്താൽ മാത്രം ഉള്ളിൽ പ്രവേശനം ലഭിക്കും</p>
+    <input type="text" id="loginUsername" placeholder="Your Username">
+    <button onclick="doUserLogin()">Continue</button>
+    <div id="loginError" class="err"></div>
   </div>
 </div>
 
-<div class="container">
-  <div class="card">
-    <p style="font-size:12px;color:#ff6b6b;margin-bottom:12px;text-align:center">
-      ⚠️ Authorized use only · All searches logged · IT Act 2000 applies
-    </p>
-    <input type="tel" id="phone" placeholder="Enter 10-digit mobile" maxlength="10" inputmode="numeric">
-    <p style="font-size:11px;color:#7b2ff7;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:8px">Choose API</p>
-    <div class="api-grid" id="apiGrid"></div>
-    <button class="btn" style="width:100%" onclick="doSearch()">🔍 Search</button>
+<!-- 2. MAIN DASHBOARD -->
+<div id="mainDash" class="hidden">
+  <div class="nav">
+    <h1>🔒 Cyber Tool <span style="font-size:11px;color:#ff6b6b">PRIVATE</span></h1>
+    <div class="nav-right">
+      <span class="credit" id="creditBadge">₹0</span>
+      <span id="userName" style="color:#aaa"></span>
+      <button class="btn btn-ghost" onclick="openRecharge()">💳 Recharge</button>
+      <button class="btn btn-ghost" onclick="doLogout()">Logout</button>
+    </div>
+  </div>
+
+  <div class="container">
+    <div class="card">
+      <p style="font-size:12px;color:#ff6b6b;margin-bottom:12px;text-align:center">
+        ⚠️ Authorized use only · All searches logged · IT Act 2000 applies
+      </p>
+      <input type="tel" id="phone" placeholder="Enter 10-digit mobile" maxlength="10" inputmode="numeric">
+      <p style="font-size:11px;color:#7b2ff7;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:8px">Choose API</p>
+      <div class="api-grid" id="apiGrid"></div>
+      <button class="btn" style="width:100%" onclick="doSearch()">🔍 Search</button>
+    </div>
   </div>
 </div>
 
@@ -146,19 +172,58 @@ async function call(url, opts={}) {
     body: opts.body ? JSON.stringify(opts.body) : undefined
   });
   const d = await r.json().catch(() => ({}));
-  if (r.status === 401) { location.href = '/login.html'; throw new Error('Login required'); }
+  if (r.status === 401) { showLogin(); throw new Error('Login required'); }
   if (!r.ok) throw new Error(d.error || 'Request failed');
   return d;
 }
 
-async function init() {
+function showLogin() {
+  document.getElementById('mainDash').classList.add('hidden');
+  document.getElementById('loginOverlay').classList.remove('hidden');
+}
+
+// പേജ് ലോഡ് ആകുമ്പോൾ ലോഗിൻ ചെക്ക് ചെയ്യുന്നു
+async function checkAuth() {
   try {
     me = await call('/api/me');
+    document.getElementById('loginOverlay').classList.add('hidden');
+    document.getElementById('mainDash').classList.remove('hidden');
     document.getElementById('userName').textContent = '👤 ' + me.name;
     document.getElementById('creditBadge').textContent = '₹' + me.credits;
     apis = await call('/api/public/apis');
     renderApis();
-  } catch (e) { location.href = '/login.html'; }
+  } catch (e) {
+    showLogin();
+  }
+}
+
+// യൂസർ ലോഗിൻ (യൂസർനെയിം മാത്രം)
+async function doUserLogin() {
+  const username = document.getElementById('loginUsername').value.trim();
+  const err = document.getElementById('loginError');
+  if (!username) { err.textContent = "Username required"; return; }
+
+  try {
+    const res = await fetch('/api/user/login', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ username })
+    });
+    const data = await res.json();
+    
+    if (data.success) {
+      checkAuth(); // വിജയിച്ചാൽ ഡാഷ്ബോർഡ് ലോഡ് ചെയ്യുന്നു
+    } else {
+      err.textContent = data.error;
+    }
+  } catch (e) {
+    err.textContent = "Network error";
+  }
+}
+
+async function doLogout() {
+  await fetch('/api/user/logout', { method:'POST', credentials:'same-origin' });
+  window.location.reload();
 }
 
 function renderApis() {
@@ -222,7 +287,7 @@ function renderResult(raw, charged) {
   body.innerHTML = html;
 }
 
-// Recharge
+// Recharge Functions
 function openRecharge() { document.getElementById('rcModal').classList.add('on'); back1(); }
 function pickAmt(el, amt) {
   document.querySelectorAll('#rc1 .api-opt').forEach(x => x.classList.remove('sel'));
@@ -263,12 +328,8 @@ async function submitPay() {
   } catch (e) { alert(e.message); }
 }
 
-async function doLogout() {
-  await fetch('/api/logout', { method:'POST', credentials:'same-origin' });
-  location.href = '/login.html';
-}
-
-init();
+// ആപ്പ് സ്റ്റാർട്ട് ചെയ്യുമ്പോൾ
+checkAuth();
 </script>
 </body>
-  </html>
+</html>
