@@ -57,8 +57,6 @@ app.use(session({
 }));
 
 // Rate limiters
-const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 10, message: { error: 'Too many attempts.' } });
-const registerLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 5, message: { error: 'Too many registrations.' } });
 const apiLimiter = rateLimit({ windowMs: 60 * 1000, max: 20, message: { error: 'Slow down.' } });
 
 // Audit logger
@@ -90,64 +88,52 @@ function requireAdmin(req, res, next) {
 }
 
 // ============ USER ROUTES ============
-// രജിസ്ട്രേഷൻ (യൂസർനെയിം, പാസ്‌വേഡ്, ഇൻവൈറ്റ് കോഡ്)
-app.post('/api/register', registerLimiter, async (req, res) => {
-  const { username, password, inviteCode } = req.body;
-  if (!username || !password || !inviteCode) return res.status(400).json({ error: 'All fields required' });
-  if (password.length < 8) return res.status(400).json({ error: 'Password min 8 characters' });
 
-  const validCodes = (process.env.INVITE_CODES || 'ALPHA2026,BETA2026').split(',').map(c => c.trim());
-  if (!validCodes.includes(inviteCode.toUpperCase())) return res.status(403).json({ error: 'Invalid invite code.' });
+// 1. യൂസർ ലോഗിൻ (യൂസർനെയിം മാത്രം നൽകി അപ്രൂവൽ ചോദിക്കുന്നു)
+app.post('/api/user/login', async (req, res) => {
+  const { username } = req.body;
+  if (!username) return res.status(400).json({ error: 'Username required' });
 
-  const db = loadDB();
-  if (db.users.find(u => u.username === username) || db.pendingUsers.find(u => u.username === username))
-    return res.status(400).json({ error: 'Username already exists' });
-
-  const pending = {
-    id: Date.now(), 
-    username, 
-    password: await bcrypt.hash(password, 10), 
-    inviteCode: inviteCode.toUpperCase(),
-    createdAt: new Date().toISOString(), 
-    approved: false, 
-    blocked: false
-  };
-  db.pendingUsers.push(pending);
-  audit(db, 'REGISTER_REQUEST', { username, inviteCode }, req);
-  saveDB(db);
-  res.json({ success: true, message: 'Registration submitted. Wait for admin approval.' });
-});
-
-// ലോഗിൻ (യൂസർനെയിം, പാസ്‌വേഡ്)
-app.post('/api/login', loginLimiter, async (req, res) => {
-  const { username, password } = req.body;
   const db = loadDB();
   
-  const pendingUser = db.pendingUsers.find(u => u.username === username);
-  if (pendingUser) return res.status(403).json({ error: '⏳ Awaiting admin approval' });
-
+  // അഡ്മിൻ അപ്രൂവ് ചെയ്ത യൂസർ ആണോ എന്ന് ചെക്ക് ചെയ്യുന്നു
   const user = db.users.find(u => u.username === username);
-  if (!user) return res.status(400).json({ error: 'Invalid credentials' });
-  if (user.blocked) return res.status(403).json({ error: 'Account blocked by admin' });
-  if (!(await bcrypt.compare(password, user.password))) return res.status(400).json({ error: 'Invalid credentials' });
+  
+  if (!user) {
+    // യൂസർ ഇല്ലെങ്കിൽ പുതിയതായി പെൻഡിംഗ് ലിസ്റ്റിലേക്ക് ചേർക്കുന്നു
+    if (!db.pendingUsers.find(u => u.username === username)) {
+      db.pendingUsers.push({ 
+        id: Date.now(), 
+        username, 
+        createdAt: new Date().toISOString() 
+      });
+      saveDB(db);
+    }
+    return res.status(403).json({ error: '⏳ Admin approval pending. Please wait.' });
+  }
 
+  if (user.blocked) return res.status(403).json({ error: 'Account blocked by admin' });
+
+  // ലോഗിൻ വിജയിച്ചു
   req.session.userId = user.id;
   req.session.username = user.username;
-  user.lastLogin = new Date().toISOString();
-  audit(db, 'LOGIN', { username }, req);
   saveDB(db);
+  
   res.json({ success: true, user: { name: user.username, credits: user.credits } });
 });
 
-app.post('/api/logout', (req, res) => {
+// 2. യൂസർ ലോഗൗട്ട്
+app.post('/api/user/logout', (req, res) => {
   req.session.destroy();
   res.json({ success: true });
 });
 
+// 3. യൂസർ വിവരങ്ങൾ
 app.get('/api/me', requireUser, (req, res) => {
   res.json({ name: req.user.username, credits: req.user.credits, totalSpent: req.user.totalSpent || 0 });
 });
 
+// 4. സെർച്ച് (ക്രെഡിറ്റ് കുറയ്ക്കൽ)
 app.post('/api/search', requireUser, apiLimiter, async (req, res) => {
   const { phone, apiId } = req.body;
   if (!/^\d{10}$/.test(phone)) return res.status(400).json({ error: 'Invalid 10-digit number' });
@@ -179,6 +165,7 @@ app.post('/api/search', requireUser, apiLimiter, async (req, res) => {
   }
 });
 
+// 5. റീചാർജ് QR
 app.post('/api/public/genqr', requireUser, (req, res) => {
   const amt = Number(req.body.amount);
   if (!amt || amt < 10) return res.status(400).json({ error: 'Minimum ₹10' });
@@ -189,6 +176,7 @@ app.post('/api/public/genqr', requireUser, (req, res) => {
   res.json({ success: true, upiLink, qrImage, txnRef, amount: amt, upiId: UPI_CONFIG.upiId });
 });
 
+// 6. റീചാർജ് റിക്വസ്റ്റ്
 app.post('/api/recharge', requireUser, (req, res) => {
   const { amount, txnId } = req.body;
   const amt = Number(amount);
@@ -204,6 +192,7 @@ app.post('/api/recharge', requireUser, (req, res) => {
   res.json({ success: true, message: 'Submitted. Admin will verify soon.' });
 });
 
+// 7. API ലിസ്റ്റ്
 app.get('/api/public/apis', requireUser, (req, res) => {
   const db = loadDB();
   res.json(db.apis.map(a => ({ id: a.id, name: a.name, price: a.price, active: a.active })));
@@ -231,14 +220,24 @@ app.get('/admin', (req, res) => {
 app.get('/api/admin/check', (req, res) => res.json({ isAdmin: !!req.session.isAdmin }));
 app.post('/api/admin/logout', (req, res) => { req.session.isAdmin = false; res.json({ success: true }); });
 
+// Pending Users
 app.get('/api/admin/pending', requireAdmin, (req, res) => res.json(loadDB().pendingUsers));
 
 app.post('/api/admin/approve-user', requireAdmin, (req, res) => {
   const db = loadDB();
   const idx = db.pendingUsers.findIndex(p => p.id === req.body.userId);
   if (idx === -1) return res.status(404).json({ error: 'Not found' });
+  
   const p = db.pendingUsers[idx];
-  db.users.push({ ...p, approved: true, credits: 0, totalSpent: 0 });
+  db.users.push({ 
+    id: p.id, 
+    username: p.username, 
+    approved: true, 
+    blocked: false, 
+    credits: 0, 
+    totalSpent: 0,
+    createdAt: p.createdAt
+  });
   db.pendingUsers.splice(idx, 1);
   saveDB(db);
   res.json({ success: true });
@@ -251,6 +250,7 @@ app.post('/api/admin/reject-user', requireAdmin, (req, res) => {
   res.json({ success: true });
 });
 
+// Users Management
 app.get('/api/admin/users', requireAdmin, (req, res) => res.json(loadDB().users));
 
 app.post('/api/admin/user/block', requireAdmin, (req, res) => {
@@ -274,6 +274,7 @@ app.delete('/api/admin/user/:id', requireAdmin, (req, res) => {
   res.json({ success: true });
 });
 
+// Payments
 app.get('/api/admin/payments', requireAdmin, (req, res) => res.json(loadDB().payments.sort((a,b) => b.id - a.id)));
 
 app.post('/api/admin/payment/approve', requireAdmin, (req, res) => {
@@ -293,6 +294,7 @@ app.post('/api/admin/payment/reject', requireAdmin, (req, res) => {
   else res.status(400).json({ error: 'Invalid' });
 });
 
+// APIs
 app.get('/api/admin/apis', requireAdmin, (req, res) => res.json(loadDB().apis));
 
 app.post('/api/admin/apis', requireAdmin, (req, res) => {
@@ -314,6 +316,7 @@ app.delete('/api/admin/apis/:id', requireAdmin, (req, res) => {
   saveDB(db); res.json({ success: true });
 });
 
+// Stats & Logs
 app.get('/api/admin/audit', requireAdmin, (req, res) => res.json(loadDB().auditLogs.slice(-200).reverse()));
 app.get('/api/admin/searches', requireAdmin, (req, res) => res.json(loadDB().searches.slice(-200).reverse()));
 
@@ -327,6 +330,7 @@ app.get('/api/admin/stats', requireAdmin, (req, res) => {
   });
 });
 
+// ============ Fallback ============
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
 const PORT = process.env.PORT || 3000;
