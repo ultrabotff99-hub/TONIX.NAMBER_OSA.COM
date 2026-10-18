@@ -206,4 +206,147 @@ async function doUserLogin() {
 }
 
 async function doLogout() {
-  await fetch('/api/user/logout', { method:'POST',
+  await fetch('/api/user/logout', { method:'POST', credentials:'same-origin' });
+  window.location.reload();
+}
+
+document.getElementById('phone').addEventListener('input', e => {
+  e.target.value = e.target.value.replace(/\D/g,'').slice(0,10);
+});
+
+async function doSearch() {
+  const phone = document.getElementById('phone').value.trim();
+  if (!/^\d{10}$/.test(phone)) return alert('Enter valid 10-digit number');
+
+  document.getElementById('resModal').classList.add('on');
+  document.getElementById('resBody').innerHTML =
+    '<div class="loader on"><div class="sp"></div><p style="font-size:12px;color:#aaa">Scanning all APIs. Please wait...</p></div>';
+
+  try {
+    // API ID അയക്കേണ്ടതില്ല, സെർവർ എല്ലാ ആക്ടീവ് API-കളിൽ നിന്നും എടുക്കും
+    const res = await call('/api/search', { method:'POST', body:{ phone }});
+    
+    me.credits = res.remainingCredits;
+    document.getElementById('creditBadge').textContent = '₹' + res.remainingCredits;
+    
+    renderResults(res.results, res.charged);
+  } catch (e) {
+    document.getElementById('resBody').innerHTML = `<div class="alert a-err">❌ ${esc(e.message)}</div>`;
+  }
+}
+
+// 👇 മൂന്ന് API-കളുടെയും റിസൾട്ട് കാണിക്കുന്ന പുതിയ ഫങ്ക്ഷൻ
+function renderResults(resultsArray, charged) {
+  const body = document.getElementById('resBody');
+  let html = `<div class="alert a-ok">✅ Total Charged: ₹${charged} • Remaining: ₹${me.credits}</div>`;
+  
+  let foundAnyData = false;
+
+  resultsArray.forEach(apiRes => {
+    // API പേര് കാണിക്കുന്നു
+    html += `<div style="margin-top:20px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:5px; display:flex; justify-content:space-between; align-items:center;">
+      <span style="color:#00d4ff; font-weight:bold; font-size:14px;">${esc(apiRes.name)}</span>
+    </div>`;
+
+    // എറർ ഉണ്ടെങ്കിൽ (ഡാറ്റ ഇല്ലെങ്കിൽ)
+    if (apiRes.error) {
+      html += `<div class="alert a-err" style="margin-top:10px; font-size:12px;">❌ ${esc(apiRes.error)}</div>`;
+      return;
+    }
+
+    // ഡാറ്റ ഉണ്ടെങ്കിൽ പാർസ് ചെയ്ത് കാണിക്കുന്നു
+    const data = apiRes.data.Data || apiRes.data.data || apiRes.data;
+    let hasData = false;
+    let sectionHtml = '';
+
+    // 1. Main≠Details
+    if (data['Main≠Details'] && data['Main≠Details'].Details?.length > 0) {
+      hasData = true;
+      sectionHtml += `<div class="ic">`;
+      data['Main≠Details'].Details.forEach(item => {
+        Object.entries(item).forEach(([k, v]) => {
+          if (!v) return;
+          let hiClass = (k === 'Full Name' || k === 'Phone' || k === 'Mobile 2') ? 'hi' : '';
+          sectionHtml += `<div class="row"><span class="lbl">${esc(k)}</span><span class="val ${hiClass}">${esc(v)}</span></div>`;
+        });
+      });
+      sectionHtml += `</div>`;
+    }
+
+    // 2. Data-2
+    if (data['Data-2'] && data['Data-2'].Details?.length > 0) {
+      hasData = true;
+      sectionHtml += `<div class="ic">`;
+      data['Data-2'].Details.forEach(item => {
+        Object.entries(item).forEach(([k, v]) => {
+          if (!v) return;
+          let hiClass = (k === 'Name' || k === 'Surname' || k === 'Phone') ? 'hi' : '';
+          sectionHtml += `<div class="row"><span class="lbl">${esc(k)}</span><span class="val ${hiClass}">${esc(v)}</span></div>`;
+        });
+      });
+      sectionHtml += `</div>`;
+    }
+
+    // 3. Data-3
+    if (data['Data-3'] && data['Data-3'].Details?.length > 0) {
+      hasData = true;
+      sectionHtml += `<div class="ic">`;
+      data['Data-3'].Details.forEach(item => {
+        Object.entries(item).forEach(([k, v]) => {
+          if (!v) return;
+          let hiClass = (k === 'Full Name' || k === 'Phone') ? 'hi' : '';
+          sectionHtml += `<div class="row"><span class="lbl">${esc(k)}</span><span class="val ${hiClass}">${esc(v)}</span></div>`;
+        });
+      });
+      sectionHtml += `</div>`;
+    }
+
+    if (hasData) {
+      foundAnyData = true;
+      html += sectionHtml;
+    } else {
+      html += `<div class="alert a-err" style="margin-top:10px; font-size:12px;">No data found in this API</div>`;
+    }
+  });
+
+  body.innerHTML = html;
+}
+
+// Recharge Functions
+function openRecharge() { document.getElementById('rcModal').classList.add('on'); back1(); }
+async function genQR() {
+  const c = Number(document.getElementById('customAmt').value);
+  if (!c || c < 10) return alert('Minimum ₹10');
+  rcAmt = c;
+
+  try {
+    const res = await call('/api/public/genqr', { method:'POST', body:{ amount: rcAmt }});
+    qrData = res;
+    document.getElementById('qrImg').src = res.qrImage;
+    document.getElementById('qrAmt').textContent = '₹' + res.amount;
+    document.getElementById('upiShow').textContent = res.upiId;
+    document.getElementById('txnIn').value = '';
+    document.getElementById('rc1').classList.add('hidden');
+    document.getElementById('rc2').classList.remove('hidden');
+  } catch (e) { alert(e.message); }
+}
+function back1() {
+  document.getElementById('rc1').classList.remove('hidden');
+  document.getElementById('rc2').classList.add('hidden');
+}
+async function submitPay() {
+  const txn = document.getElementById('txnIn').value.trim();
+  if (txn.length < 6) return alert('Enter valid Txn ID');
+  try {
+    await call('/api/recharge', { method:'POST', body:{ amount: rcAmt, txnId: txn, txnRef: qrData?.txnRef }});
+    alert('✅ Submitted! Admin will verify it soon.');
+    closeM('rcModal');
+    rcAmt = 0; qrData = null;
+    document.getElementById('customAmt').value = '';
+  } catch (e) { alert(e.message); }
+}
+
+checkAuth();
+</script>
+</body>
+       </html>
