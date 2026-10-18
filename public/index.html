@@ -41,6 +41,8 @@
   .api-opt.sel{border-color:#00d4ff;background:rgba(0,212,255,0.08)}
   .api-opt .name{font-size:13px;margin-bottom:6px}
   .api-opt .price{color:#00ffa3;font-weight:700;font-size:13px}
+  
+  /* Modal Styles */
   .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);backdrop-filter:blur(6px);
     z-index:999;padding:15px;overflow-y:auto}
   .modal.on{display:block}
@@ -49,16 +51,20 @@
   .mh{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;
     padding-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.1)}
   .x{background:rgba(255,0,0,0.2);border:1px solid rgba(255,0,0,0.5);color:#ff6b6b;
-    width:34px;height:34px;border-radius:50%;cursor:pointer;font-size:15px}
-  .sec{font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:#7b2ff7;
-    margin:16px 0 10px;padding-left:10px;border-left:3px solid #7b2ff7}
-  .row{display:flex;justify-content:space-between;gap:10px;padding:7px 0;
+    width:34px;height:34px;border-radius:50%;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center}
+  
+  /* Data Display Styles */
+  .sec-title{font-size:13px;text-transform:uppercase;letter-spacing:1.5px;color:#00d4ff;
+    margin:20px 0 10px;padding-left:10px;border-left:3px solid #00d4ff;font-weight:bold;}
+  .row{display:flex;justify-content:space-between;gap:10px;padding:8px 0;
     border-bottom:1px dashed rgba(255,255,255,0.07);font-size:13px}
   .row:last-child{border:none}
-  .lbl{color:#9aa5b1;min-width:110px}
+  .lbl{color:#9aa5b1;min-width:120px;word-break:break-word}
   .val{color:#fff;text-align:right;flex:1;word-break:break-word}
-  .val.hi{color:#00ffa3}
-  .ic{background:rgba(0,0,0,0.3);border:1px solid rgba(255,255,255,0.07);border-radius:10px;padding:12px;margin-bottom:10px}
+  .val.hi{color:#00ffa3;font-weight:bold}
+  .ic{background:rgba(0,0,0,0.35);border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:12px;margin-bottom:12px;box-shadow: 0 4px 6px rgba(0,0,0,0.1)}
+  
+  /* Loader & Alerts */
   .loader{text-align:center;padding:30px;display:none}
   .loader.on{display:block}
   .sp{width:44px;height:44px;border:4px solid rgba(255,255,255,0.08);border-top-color:#00d4ff;
@@ -71,7 +77,7 @@
 </head>
 <body>
 
-<!-- 1. LOGIN OVERLAY (യൂസർനെയിം ചോദിക്കാൻ) -->
+<!-- 1. LOGIN OVERLAY -->
 <div id="loginOverlay" class="overlay hidden">
   <div class="login-box">
     <h2>🔒 Enter Username</h2>
@@ -97,12 +103,12 @@
   <div class="container">
     <div class="card">
       <p style="font-size:12px;color:#ff6b6b;margin-bottom:12px;text-align:center">
-        ⚠️ Authorized use only · All searches logged · IT Act 2000 applies
+        ⚠️ Authorized use only · All searches logged
       </p>
-      <input type="tel" id="phone" placeholder="Enter 10-digit mobile" maxlength="10" inputmode="numeric">
+      <input type="tel" id="phone" placeholder="Enter 10-digit mobile number" maxlength="10" inputmode="numeric">
       <p style="font-size:11px;color:#7b2ff7;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:8px">Choose API</p>
       <div class="api-grid" id="apiGrid"></div>
-      <button class="btn" style="width:100%" onclick="doSearch()">🔍 Search</button>
+      <button class="btn" style="width:100%" onclick="doSearch()">🔍 Search Now</button>
     </div>
   </div>
 </div>
@@ -111,7 +117,7 @@
 <div class="modal" id="resModal">
   <div class="mc">
     <div class="mh">
-      <h2 style="font-size:15px;color:#00d4ff">📋 Result</h2>
+      <h2 style="font-size:15px;color:#00d4ff">📋 Number Information</h2>
       <button class="x" onclick="closeM('resModal')">✕</button>
     </div>
     <div id="resBody"></div>
@@ -122,7 +128,7 @@
 <div class="modal" id="rcModal">
   <div class="mc" style="max-width:480px">
     <div class="mh">
-      <h2 style="font-size:15px;color:#00d4ff">💳 Recharge</h2>
+      <h2 style="font-size:15px;color:#00d4ff">💳 Recharge Credits</h2>
       <button class="x" onclick="closeM('rcModal')">✕</button>
     </div>
 
@@ -133,8 +139,8 @@
         <div class="api-opt" onclick="pickAmt(this,100)"><div class="name">₹100</div></div>
         <div class="api-opt" onclick="pickAmt(this,500)"><div class="name">₹500</div></div>
       </div>
-      <input type="number" id="customAmt" placeholder="Custom (min ₹10)" min="10">
-      <button class="btn" style="width:100%" onclick="genQR()">📱 Generate QR</button>
+      <input type="number" id="customAmt" placeholder="Custom amount (min ₹10)" min="10">
+      <button class="btn" style="width:100%" onclick="genQR()">📱 Generate QR Code</button>
     </div>
 
     <div id="rc2" class="hidden" style="text-align:center">
@@ -147,10 +153,10 @@
         <p style="font-size:10px;color:#888">UPI ID</p>
         <p id="upiShow" style="font-size:13px;font-weight:700;color:#00d4ff"></p>
       </div>
-      <input type="text" id="txnIn" placeholder="12-digit UTR / Txn ID" style="text-align:center">
+      <input type="text" id="txnIn" placeholder="Enter 12-digit UTR / Txn ID" style="text-align:center">
       <div style="display:flex;gap:8px">
         <button class="btn btn-ghost" style="flex:1" onclick="back1()">← Back</button>
-        <button class="btn" style="flex:2" onclick="submitPay()">✅ I Paid</button>
+        <button class="btn" style="flex:2" onclick="submitPay()">✅ I Have Paid</button>
       </div>
       <p style="font-size:11px;color:#ff6b6b;margin-top:10px">⚠️ Admin verify ചെയ്തതിന് ശേഷം credits add ആകും</p>
       <div id="rcMsg" style="margin-top:10px"></div>
@@ -182,7 +188,6 @@ function showLogin() {
   document.getElementById('loginOverlay').classList.remove('hidden');
 }
 
-// പേജ് ലോഡ് ആകുമ്പോൾ ലോഗിൻ ചെക്ക് ചെയ്യുന്നു
 async function checkAuth() {
   try {
     me = await call('/api/me');
@@ -197,7 +202,6 @@ async function checkAuth() {
   }
 }
 
-// യൂസർ ലോഗിൻ (യൂസർനെയിം മാത്രം)
 async function doUserLogin() {
   const username = document.getElementById('loginUsername').value.trim();
   const err = document.getElementById('loginError');
@@ -212,12 +216,12 @@ async function doUserLogin() {
     const data = await res.json();
     
     if (data.success) {
-      checkAuth(); // വിജയിച്ചാൽ ഡാഷ്ബോർഡ് ലോഡ് ചെയ്യുന്നു
+      checkAuth();
     } else {
       err.textContent = data.error;
     }
   } catch (e) {
-    err.textContent = "Network error";
+    err.textContent = "Network error. Try again.";
   }
 }
 
@@ -248,43 +252,85 @@ async function doSearch() {
 
   document.getElementById('resModal').classList.add('on');
   document.getElementById('resBody').innerHTML =
-    '<div class="loader on"><div class="sp"></div><p style="font-size:12px;color:#aaa">Fetching...</p></div>';
+    '<div class="loader on"><div class="sp"></div><p style="font-size:12px;color:#aaa">Fetching data from server...</p></div>';
 
   try {
     const res = await call('/api/search', { method:'POST', body:{ phone, apiId: selApi }});
     me.credits = res.remainingCredits;
     document.getElementById('creditBadge').textContent = '₹' + res.remainingCredits;
-    renderResult(res.data, res.charged);
+    
+    // ഡാറ്റ റെൻഡർ ചെയ്യുന്ന ഫങ്ക്ഷൻ വിളിക്കുന്നു
+    renderResult(res.data, res.charged, res.apiName);
   } catch (e) {
     document.getElementById('resBody').innerHTML = `<div class="alert a-err">❌ ${esc(e.message)}</div>`;
   }
 }
 
-function renderResult(raw, charged) {
+// 👇 പുതിയ JSON ഡാറ്റ പ്രകാരം റെൻഡർ ചെയ്യുന്ന ഫങ്ക്ഷൻ
+function renderResult(raw, charged, apiName) {
   const body = document.getElementById('resBody');
   let html = `<div class="alert a-ok">✅ Charged ₹${charged} • Remaining ₹${me.credits}</div>`;
+  
   const data = raw.Data || raw.data || raw;
-  let secs = [];
+  
+  // ഡാറ്റ ഉണ്ടോ എന്ന് ചെക്ക് ചെയ്യുന്നു
+  if (!data || Object.keys(data).length === 0) {
+    body.innerHTML = html + `<div class="alert a-err">❌ No data found for this number.</div>`;
+    return;
+  }
 
-  if (data['Main≠Details']?.Details) secs.push({ title:'Main Details', items:data['Main≠Details'].Details });
-  if (data['Data-2']?.Details)       secs.push({ title:'Data-2', items:data['Data-2'].Details });
-  if (data['Data-3']?.Details)       secs.push({ title:'Data-3', items:data['Data-3'].Details });
+  let hasData = false;
 
-  if (!secs.length) { body.innerHTML = html + '<div class="alert a-err">No data</div>'; return; }
-
-  secs.forEach(s => {
-    html += `<div class="sec">${esc(s.title)}</div>`;
-    s.items.forEach(it => {
+  // 1️⃣ Main≠Details (Basic Info)
+  if (data['Main≠Details'] && data['Main≠Details'].Details && data['Main≠Details'].Details.length > 0) {
+    hasData = true;
+    html += `<div class="sec-title">📌 Main Details</div>`;
+    data['Main≠Details'].Details.forEach(item => {
       html += '<div class="ic">';
-      Object.entries(it).forEach(([k,v]) => {
-        if (v === null || v === undefined || v === '') return;
-        const hi = (k === 'Phone' || k === 'Mobile 2') ? 'hi' : '';
-        html += `<div class="row"><span class="lbl">${esc(k)}</span><span class="val ${hi}">${esc(String(v))}</span></div>`;
+      Object.entries(item).forEach(([k, v]) => {
+        if (!v) return;
+        let hiClass = (k === 'Full Name' || k === 'Phone' || k === 'Mobile 2') ? 'hi' : '';
+        html += `<div class="row"><span class="lbl">${esc(k)}</span><span class="val ${hiClass}">${esc(v)}</span></div>`;
       });
       html += '</div>';
     });
-  });
-  body.innerHTML = html;
+  }
+
+  // 2️⃣ Data-2 (Advanced Info)
+  if (data['Data-2'] && data['Data-2'].Details && data['Data-2'].Details.length > 0) {
+    hasData = true;
+    html += `<div class="sec-title" style="color:#7b2ff7;border-left-color:#7b2ff7;">📌 Advanced Details</div>`;
+    data['Data-2'].Details.forEach(item => {
+      html += '<div class="ic">';
+      Object.entries(item).forEach(([k, v]) => {
+        if (!v) return;
+        let hiClass = (k === 'Name' || k === 'Surname' || k === 'Phone') ? 'hi' : '';
+        html += `<div class="row"><span class="lbl">${esc(k)}</span><span class="val ${hiClass}">${esc(v)}</span></div>`;
+      });
+      html += '</div>';
+    });
+  }
+
+  // 3️⃣ Data-3 (Location / Provider Info)
+  if (data['Data-3'] && data['Data-3'].Details && data['Data-3'].Details.length > 0) {
+    hasData = true;
+    html += `<div class="sec-title" style="color:#ffaa00;border-left-color:#ffaa00;">📌 Location & Provider</div>`;
+    data['Data-3'].Details.forEach(item => {
+      html += '<div class="ic">';
+      Object.entries(item).forEach(([k, v]) => {
+        if (!v) return;
+        let hiClass = (k === 'Full Name' || k === 'Phone') ? 'hi' : '';
+        html += `<div class="row"><span class="lbl">${esc(k)}</span><span class="val ${hiClass}">${esc(v)}</span></div>`;
+      });
+      html += '</div>';
+    });
+  }
+
+  if (!hasData) {
+    body.innerHTML = html + `<div class="alert a-err">❌ No valid data records found in response.</div>`;
+  } else {
+    body.innerHTML = html;
+  }
 }
 
 // Recharge Functions
@@ -320,7 +366,7 @@ async function submitPay() {
   if (txn.length < 6) return alert('Enter valid Txn ID');
   try {
     await call('/api/recharge', { method:'POST', body:{ amount: rcAmt, txnId: txn, txnRef: qrData?.txnRef }});
-    alert('✅ Submitted! Admin verify ചെയ്യും');
+    alert('✅ Submitted! Admin will verify it soon.');
     closeM('rcModal');
     rcAmt = 0; qrData = null;
     document.querySelectorAll('#rc1 .api-opt').forEach(x => x.classList.remove('sel'));
@@ -328,8 +374,8 @@ async function submitPay() {
   } catch (e) { alert(e.message); }
 }
 
-// ആപ്പ് സ്റ്റാർട്ട് ചെയ്യുമ്പോൾ
+// ആപ്പ് സ്റ്റാർട്ട്
 checkAuth();
 </script>
 </body>
-</html>
+       </html>
