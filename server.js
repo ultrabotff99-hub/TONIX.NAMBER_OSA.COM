@@ -89,24 +89,17 @@ function requireAdmin(req, res, next) {
 
 // ============ USER ROUTES ============
 
-// 1. യൂസർ ലോഗിൻ (യൂസർനെയിം മാത്രം നൽകി അപ്രൂവൽ ചോദിക്കുന്നു)
+// 1. യൂസർ ലോഗിൻ (യൂസർനെയിം മാത്രം)
 app.post('/api/user/login', async (req, res) => {
   const { username } = req.body;
   if (!username) return res.status(400).json({ error: 'Username required' });
 
   const db = loadDB();
-  
-  // അഡ്മിൻ അപ്രൂവ് ചെയ്ത യൂസർ ആണോ എന്ന് ചെക്ക് ചെയ്യുന്നു
   const user = db.users.find(u => u.username === username);
   
   if (!user) {
-    // യൂസർ ഇല്ലെങ്കിൽ പുതിയതായി പെൻഡിംഗ് ലിസ്റ്റിലേക്ക് ചേർക്കുന്നു
     if (!db.pendingUsers.find(u => u.username === username)) {
-      db.pendingUsers.push({ 
-        id: Date.now(), 
-        username, 
-        createdAt: new Date().toISOString() 
-      });
+      db.pendingUsers.push({ id: Date.now(), username, createdAt: new Date().toISOString() });
       saveDB(db);
     }
     return res.status(403).json({ error: '⏳ Admin approval pending. Please wait.' });
@@ -114,7 +107,6 @@ app.post('/api/user/login', async (req, res) => {
 
   if (user.blocked) return res.status(403).json({ error: 'Account blocked by admin' });
 
-  // ലോഗിൻ വിജയിച്ചു
   req.session.userId = user.id;
   req.session.username = user.username;
   saveDB(db);
@@ -122,50 +114,93 @@ app.post('/api/user/login', async (req, res) => {
   res.json({ success: true, user: { name: user.username, credits: user.credits } });
 });
 
-// 2. യൂസർ ലോഗൗട്ട്
 app.post('/api/user/logout', (req, res) => {
   req.session.destroy();
   res.json({ success: true });
 });
 
-// 3. യൂസർ വിവരങ്ങൾ
 app.get('/api/me', requireUser, (req, res) => {
   res.json({ name: req.user.username, credits: req.user.credits, totalSpent: req.user.totalSpent || 0 });
 });
 
-// 4. സെർച്ച് (ക്രെഡിറ്റ് കുറയ്ക്കൽ)
+// 2. അൾട്രാ സെർച്ച് (മൂന്ന് API-കളിൽ നിന്നും ഒരുമിച്ച് ഡാറ്റ എടുക്കുന്നു)
 app.post('/api/search', requireUser, apiLimiter, async (req, res) => {
-  const { phone, apiId } = req.body;
+  const { phone } = req.body;
   if (!/^\d{10}$/.test(phone)) return res.status(400).json({ error: 'Invalid 10-digit number' });
 
   const db = loadDB();
   const user = db.users.find(u => u.id === req.session.userId);
-  const api = db.apis.find(a => a.id === apiId);
-  if (!api || !api.active) return res.status(400).json({ error: 'API unavailable' });
+  
+  // ആക്ടീവ് ആയ എല്ലാ API-കളും എടുക്കുന്നു
+  const activeApis = db.apis.filter(a => a.active);
+  if (activeApis.length === 0) return res.status(400).json({ error: 'No active APIs available' });
 
-  const cost = api.price || 10;
-  if (user.credits < cost) return res.status(402).json({ error: `Need ₹${cost}. Recharge first.` });
-
-  if (api.lastReset !== today()) { api.usedToday = 0; api.lastReset = today(); }
-  if (api.usedToday >= api.dailyLimit) return res.status(429).json({ error: 'API daily limit reached' });
-
-  try {
-    const response = await axios.get(api.url + phone, { timeout: 20000 });
-    user.credits -= cost;
-    user.totalSpent = (user.totalSpent || 0) + cost;
-    api.usedToday++;
-
-    db.searches.push({ id: Date.now(), userId: user.id, username: user.username, phone, apiId: api.id, apiName: api.name, cost, timestamp: new Date().toISOString() });
-    audit(db, 'SEARCH', { phone, apiId, cost }, req);
-    saveDB(db);
-
-    res.json({ success: true, charged: cost, remainingCredits: user.credits, data: response.data });
-  } catch (err) {
-    res.status(500).json({ error: 'API fetch failed' });
+  // മൂന്ന് API-കളുടെയും ആകെ വില കണക്കാക്കുന്നു
+  const totalCost = activeApis.reduce((sum, api) => sum + (api.price || 10), 0);
+  
+  if (user.credits < totalCost) {
+    return res.status(402).json({ error: `Need ₹${totalCost} to search all APIs. Recharge first.` });
   }
+
+  // എല്ലാ API-കളിലേക്കും ഒരുമിച്ച് റിക്വസ്റ്റ് അയക്കുന്നു
+  const results = {};
+  let chargedAmount = 0;
+
+  const fetchPromises = activeApis.map(async (api) => {
+    try {
+      // ഡെയിലി ലിമിറ്റ് ചെക്ക്
+      if (api.lastReset !== today()) { api.usedToday = 0; api.lastReset = today(); }
+      if (api.usedToday >= api.dailyLimit) {
+        return { apiId: api.id, name: api.name, error: 'API daily limit reached' };
+      }
+
+      const response = await axios.get(api.url + phone, { 
+        timeout: 20000,
+        headers: { 'User-Agent': 'Mozilla/5.0' }
+      });
+      
+      const data = response.data;
+      const apiData = data.Data || data.data || data;
+      
+      // ഡാറ്റ ഉണ്ടോ എന്ന് ചെക്ക് ചെയ്യുന്നു
+      let hasData = false;
+      if (apiData['Main≠Details']?.Details?.length > 0) hasData = true;
+      if (apiData['Data-2']?.Details?.length > 0) hasData = true;
+      if (apiData['Data-3']?.Details?.length > 0) hasData = true;
+      if (apiData.Details?.length > 0) hasData = true;
+
+      if (hasData) {
+        // ഡാറ്റ കിട്ടിയാൽ മാത്രം ക്രെഡിറ്റ് കുറയ്ക്കുന്നു
+        chargedAmount += (api.price || 10);
+        api.usedToday++;
+        return { apiId: api.id, name: api.name, data: data };
+      } else {
+        return { apiId: api.id, name: api.name, error: 'No data found for this number' };
+      }
+    } catch (err) {
+      return { apiId: api.id, name: api.name, error: 'API failed or timeout' };
+    }
+  });
+
+  const fetchResults = await Promise.all(fetchPromises);
+
+  // ക്രെഡിറ്റ് കുറയ്ക്കുന്നു
+  user.credits -= chargedAmount;
+  user.totalSpent = (user.totalSpent || 0) + chargedAmount;
+  
+  db.searches.push({ id: Date.now(), userId: user.id, username: user.username, phone, cost: chargedAmount, timestamp: new Date().toISOString() });
+  saveDB(db);
+
+  // ഫ്രണ്ട് എൻഡിലേക്ക് റിസൾട്ട് അയക്കുന്നു
+  res.json({ 
+    success: true, 
+    charged: chargedAmount, 
+    remainingCredits: user.credits, 
+    results: fetchResults 
+  });
 });
 
-// 5. റീചാർജ് QR
+// 3. റീചാർജ് QR
 app.post('/api/public/genqr', requireUser, (req, res) => {
   const amt = Number(req.body.amount);
   if (!amt || amt < 10) return res.status(400).json({ error: 'Minimum ₹10' });
@@ -176,7 +211,6 @@ app.post('/api/public/genqr', requireUser, (req, res) => {
   res.json({ success: true, upiLink, qrImage, txnRef, amount: amt, upiId: UPI_CONFIG.upiId });
 });
 
-// 6. റീചാർജ് റിക്വസ്റ്റ്
 app.post('/api/recharge', requireUser, (req, res) => {
   const { amount, txnId } = req.body;
   const amt = Number(amount);
@@ -187,62 +221,43 @@ app.post('/api/recharge', requireUser, (req, res) => {
   if (db.payments.find(p => p.txnId === txnId)) return res.status(400).json({ error: 'Txn ID already submitted' });
 
   db.payments.push({ id: Date.now(), userId: req.user.id, username: req.user.username, amount: amt, method: 'upi', txnId, status: 'pending', timestamp: new Date().toISOString() });
-  audit(db, 'PAYMENT_REQUEST', { amount: amt, txnId }, req);
   saveDB(db);
   res.json({ success: true, message: 'Submitted. Admin will verify soon.' });
 });
 
-// 7. API ലിസ്റ്റ്
 app.get('/api/public/apis', requireUser, (req, res) => {
   const db = loadDB();
-  res.json(db.apis.map(a => ({ id: a.id, name: a.name, price: a.price, active: a.active })));
+  res.json(db.apis.filter(a => a.active).map(a => ({ id: a.id, name: a.name, price: a.price })));
 });
 
-// ============ ADMIN DIRECT URL LOGIN ============
+// ============ ADMIN ROUTES (Same as before) ============
 app.get('/admin', (req, res) => {
   const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '3007';
-
   if (req.query.pass === ADMIN_PASSWORD) {
     req.session.isAdmin = true;
-    const db = loadDB();
-    audit(db, 'ADMIN_LOGIN_URL', { ip: req.ip }, req);
-    saveDB(db);
     req.session.save((err) => {
       if (err) return res.status(500).send("Session error");
       res.sendFile(path.join(__dirname, 'public', 'admin.html'));
     });
   } else {
-    res.status(401).send(`<body style="background:#0a0e27;color:#fff;text-align:center;padding:50px;font-family:sans-serif;"><h2 style="color:#ff6b6b;">⛔ Unauthorized Access</h2><p>Invalid or missing password in URL.</p></body>`);
+    res.status(401).send(`<body style="background:#0a0e27;color:#fff;text-align:center;padding:50px;font-family:sans-serif;"><h2 style="color:#ff6b6b;">⛔ Unauthorized Access</h2></body>`);
   }
 });
 
-// ============ ADMIN API ROUTES ============
 app.get('/api/admin/check', (req, res) => res.json({ isAdmin: !!req.session.isAdmin }));
 app.post('/api/admin/logout', (req, res) => { req.session.isAdmin = false; res.json({ success: true }); });
 
-// Pending Users
 app.get('/api/admin/pending', requireAdmin, (req, res) => res.json(loadDB().pendingUsers));
-
 app.post('/api/admin/approve-user', requireAdmin, (req, res) => {
   const db = loadDB();
   const idx = db.pendingUsers.findIndex(p => p.id === req.body.userId);
   if (idx === -1) return res.status(404).json({ error: 'Not found' });
-  
   const p = db.pendingUsers[idx];
-  db.users.push({ 
-    id: p.id, 
-    username: p.username, 
-    approved: true, 
-    blocked: false, 
-    credits: 0, 
-    totalSpent: 0,
-    createdAt: p.createdAt
-  });
+  db.users.push({ id: p.id, username: p.username, approved: true, blocked: false, credits: 0, totalSpent: 0, createdAt: p.createdAt });
   db.pendingUsers.splice(idx, 1);
   saveDB(db);
   res.json({ success: true });
 });
-
 app.post('/api/admin/reject-user', requireAdmin, (req, res) => {
   const db = loadDB();
   db.pendingUsers = db.pendingUsers.filter(p => p.id !== req.body.userId);
@@ -250,23 +265,19 @@ app.post('/api/admin/reject-user', requireAdmin, (req, res) => {
   res.json({ success: true });
 });
 
-// Users Management
 app.get('/api/admin/users', requireAdmin, (req, res) => res.json(loadDB().users));
-
 app.post('/api/admin/user/block', requireAdmin, (req, res) => {
   const db = loadDB();
   const u = db.users.find(x => x.id === req.body.userId);
   if (u) { u.blocked = !!req.body.blocked; saveDB(db); res.json({ success: true }); }
   else res.status(404).json({ error: 'Not found' });
 });
-
 app.post('/api/admin/user/credits', requireAdmin, (req, res) => {
   const db = loadDB();
   const u = db.users.find(x => x.id === req.body.userId);
   if (u) { u.credits += Number(req.body.delta); saveDB(db); res.json({ success: true, credits: u.credits }); }
   else res.status(404).json({ error: 'Not found' });
 });
-
 app.delete('/api/admin/user/:id', requireAdmin, (req, res) => {
   const db = loadDB();
   db.users = db.users.filter(x => x.id != req.params.id);
@@ -274,9 +285,7 @@ app.delete('/api/admin/user/:id', requireAdmin, (req, res) => {
   res.json({ success: true });
 });
 
-// Payments
 app.get('/api/admin/payments', requireAdmin, (req, res) => res.json(loadDB().payments.sort((a,b) => b.id - a.id)));
-
 app.post('/api/admin/payment/approve', requireAdmin, (req, res) => {
   const db = loadDB();
   const p = db.payments.find(x => x.id === req.body.paymentId);
@@ -286,7 +295,6 @@ app.post('/api/admin/payment/approve', requireAdmin, (req, res) => {
     p.status = 'approved'; saveDB(db); res.json({ success: true });
   } else res.status(400).json({ error: 'Invalid' });
 });
-
 app.post('/api/admin/payment/reject', requireAdmin, (req, res) => {
   const db = loadDB();
   const p = db.payments.find(x => x.id === req.body.paymentId);
@@ -294,29 +302,24 @@ app.post('/api/admin/payment/reject', requireAdmin, (req, res) => {
   else res.status(400).json({ error: 'Invalid' });
 });
 
-// APIs
 app.get('/api/admin/apis', requireAdmin, (req, res) => res.json(loadDB().apis));
-
 app.post('/api/admin/apis', requireAdmin, (req, res) => {
   const db = loadDB();
   db.apis.push({ id: Date.now(), name: req.body.name, url: req.body.url, price: Number(req.body.price) || 10, dailyLimit: Number(req.body.dailyLimit) || 1000, usedToday: 0, lastReset: today(), active: true });
   saveDB(db); res.json({ success: true });
 });
-
 app.put('/api/admin/apis/:id', requireAdmin, (req, res) => {
   const db = loadDB();
   const api = db.apis.find(a => a.id == req.params.id);
   if (api) { Object.assign(api, req.body); saveDB(db); res.json({ success: true }); }
   else res.status(404).json({ error: 'Not found' });
 });
-
 app.delete('/api/admin/apis/:id', requireAdmin, (req, res) => {
   const db = loadDB();
   db.apis = db.apis.filter(a => a.id != req.params.id);
   saveDB(db); res.json({ success: true });
 });
 
-// Stats & Logs
 app.get('/api/admin/audit', requireAdmin, (req, res) => res.json(loadDB().auditLogs.slice(-200).reverse()));
 app.get('/api/admin/searches', requireAdmin, (req, res) => res.json(loadDB().searches.slice(-200).reverse()));
 
@@ -330,7 +333,6 @@ app.get('/api/admin/stats', requireAdmin, (req, res) => {
   });
 });
 
-// ============ Fallback ============
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
 const PORT = process.env.PORT || 3000;
